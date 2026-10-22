@@ -1,0 +1,54 @@
+# Same topology as movingfirm-backend: db → one-shot migrate → app services.
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: luuri
+      POSTGRES_USER: luuri
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-luuri}
+    volumes:
+      - luuri_db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U luuri -d luuri"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  migrate:
+    image: ${LUURI_IMAGE:-ghcr.io/muutto365/luuri}:${LUURI_IMAGE_TAG:-prod}
+    build: .
+    command: ["python", "migrate.py"]
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+psycopg2://luuri:${POSTGRES_PASSWORD:-luuri}@db:5432/luuri
+    depends_on:
+      db:
+        condition: service_healthy
+
+  api:
+    image: ${LUURI_IMAGE:-ghcr.io/muutto365/luuri}:${LUURI_IMAGE_TAG:-prod}
+    build: .
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+psycopg2://luuri:${POSTGRES_PASSWORD:-luuri}@db:5432/luuri
+    ports:
+      - "${LUURI_PORT:-8080}:8000"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  worker:
+    image: ${LUURI_IMAGE:-ghcr.io/muutto365/luuri}:${LUURI_IMAGE_TAG:-prod}
+    build: .
+    command: ["python", "worker.py"]
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+psycopg2://luuri:${POSTGRES_PASSWORD:-luuri}@db:5432/luuri
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+volumes:
+  luuri_db:
