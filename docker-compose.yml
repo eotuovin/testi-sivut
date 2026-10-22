@@ -6,9 +6,11 @@
 # LUURI_IMAGE_TAG indirection like movingfirm-admin, so the host compiles
 # nothing.
 #
-# The web service publishes no host port: it joins the shared `proxy` network
-# and Nginx Proxy Manager routes a hostname to `luuri:8000`. The database
-# stays on a project-local network only.
+# VPN-only like movingfirm-admin: the web service binds to the WireGuard
+# address (LUURI_BIND, default 10.8.0.4:6770) and has no public route. Public
+# authentication is meant to go through Keycloak later; until then nothing
+# here is reachable outside the VPN. The database stays on a project-local
+# network only.
 
 services:
   db:
@@ -46,6 +48,8 @@ services:
     build: .
     image: luuri:${LUURI_IMAGE_TAG:-local}
     restart: unless-stopped
+    ports:
+      - "${LUURI_BIND:-10.8.0.4:6770}:8000"
     environment:
       DATABASE_URL: postgresql+psycopg2://luuri:${POSTGRES_PASSWORD}@db:5432/luuri
       SESSION_SECRET: ${SESSION_SECRET}
@@ -62,7 +66,6 @@ services:
       ANALYTICS_UX_EVENTS_URL: ${ANALYTICS_UX_EVENTS_URL:-}
     networks:
       - luuri_internal
-      - proxy
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -93,16 +96,12 @@ services:
       ANALYTICS_UX_EVENTS_URL: ${ANALYTICS_UX_EVENTS_URL:-}
     networks:
       - luuri_internal
-      - proxy
     depends_on:
       migrate:
         condition: service_completed_successfully
 
 networks:
   luuri_internal:
-  proxy:
-    # NPM's network, created outside every stack (same as movingfirm-admin).
-    external: true
 
 volumes:
   luuri_db:
