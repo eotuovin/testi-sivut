@@ -140,7 +140,7 @@ async function release() {
     </div>
 
     <div class="card">
-      <OutcomeForm :contacts="store.task.contacts" :contact-id="contact?.id ?? null" :phone="contact?.phone_e164 ?? null" :busy="busy" @submit="submit" />
+      <OutcomeForm :key="store.task.id" :task-id="store.task.id" :initial-notes="store.task.notes_draft ?? ''" :contacts="store.task.contacts" :contact-id="contact?.id ?? null" :phone="contact?.phone_e164 ?? null" :busy="busy" @submit="submit" />
     </div>
   </div>
 

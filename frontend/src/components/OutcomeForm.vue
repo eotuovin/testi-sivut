@@ -1,21 +1,41 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import type { CallLog, Contact, Outcome } from '../api/types'
 import { OUTCOME_LABELS } from '../api/types'
+import { apiPut, errorText } from '../api/client'
+import BookingFields, { type BookingDraft, emptyBooking } from './BookingFields.vue'
 
-const props = defineProps<{ contacts: Contact[]; contactId: string | null; phone: string | null; busy: boolean }>()
+const props = defineProps<{ taskId: string; contacts: Contact[]; contactId: string | null; phone: string | null; busy: boolean; initialNotes: string }>()
 const emit = defineEmits<{ (e: 'submit', body: CallLog): void }>()
 
 const ORDER: Outcome[] = ['no_answer', 'busy', 'voicemail', 'gatekeeper', 'callback', 'not_interested', 'already_customer', 'wrong_number', 'do_not_call', 'booked']
 const outcome = ref<Outcome | null>(null)
-const notes = ref('')
+const notes = ref(props.initialNotes || '')
+const savedAt = ref<Date | null>(null)
+const saving = ref(false)
 const callbackAt = ref(defaultCallback())
-const bookingAt = ref('')
-const bookingValue = ref<number | null>(null)
-const bookingNotes = ref('')
+const booking = ref<BookingDraft>(emptyBooking(props.contacts.find((c) => c.id === props.contactId)?.email ?? null))
 const addContact = ref(false)
 const nc = ref({ name: '', title: '', phone: '', email: '' })
 const error = ref('')
+
+// Autosave notes while the call is on — a reload or a crash loses nothing.
+let timer: number | undefined
+watch(notes, () => {
+  window.clearTimeout(timer)
+  timer = window.setTimeout(saveDraft, 800)
+})
+async function saveDraft() {
+  saving.value = true
+  try {
+    const r = await apiPut<{ saved_at: string }>(`/calls/tasks/${props.taskId}/draft`, { notes: notes.value })
+    savedAt.value = new Date(r.saved_at)
+  } catch (e) {
+    error.value = errorText(e)
+  } finally {
+    saving.value = false
+  }
+}
 
 function defaultCallback() {
   const d = new Date(Date.now() + 24 * 3600 * 1000)
@@ -34,17 +54,24 @@ function pick(o: Outcome) {
 const canSubmit = computed(() => {
   if (!outcome.value) return false
   if (outcome.value === 'callback' && !callbackAt.value) return false
+  if (outcome.value === 'booked' && !booking.value.scheduled_at) return false
   return true
 })
 function submit() {
   if (!outcome.value) return
+  window.clearTimeout(timer)
   const body: CallLog = { outcome: outcome.value, notes: notes.value || null, contact_id: props.contactId, phone_dialed: props.phone }
   if (outcome.value === 'callback') body.callback_at = new Date(callbackAt.value).toISOString()
   if (outcome.value === 'booked') {
+    const b = booking.value
     body.booking = {
-      scheduled_at: bookingAt.value ? new Date(bookingAt.value).toISOString() : null,
-      value_eur: bookingValue.value,
-      notes: bookingNotes.value || null,
+      scheduled_at: new Date(b.scheduled_at).toISOString(),
+      duration_minutes: b.duration_minutes,
+      location: b.location || null,
+      meeting_url: b.meeting_url || null,
+      attendee_email: b.attendee_email || null,
+      value_eur: b.value_eur,
+      notes: b.notes || null,
     }
   }
   if (addContact.value && (nc.value.name || nc.value.phone || nc.value.email)) {
@@ -59,6 +86,14 @@ function submit() {
 
 <template>
   <div>
+    <div class="field">
+      <label>
+        Muistiinpanot puhelun aikana
+        <span class="muted" style="float: right">{{ saving ? 'tallennetaan…' : savedAt ? 'tallennettu ' + savedAt.toLocaleTimeString('fi-FI', { hour: '2-digit', minute: '2-digit' }) : 'tallentuu automaattisesti' }}</span>
+      </label>
+      <textarea v-model="notes" style="min-height: 140px" placeholder="Kirjoita tähän sitä mukaa kun puhutte: mitä sanoi, mikä kiinnosti, kuka päättää, milloin kannattaa palata…" />
+    </div>
+
     <h2>Lopputulos</h2>
     <div class="outcomes">
       <button v-for="o in ORDER" :key="o" :class="{ selected: outcome === o, primary: o === 'booked' && outcome === o, danger: o === 'do_not_call' && outcome === o }" @click="pick(o)">
@@ -71,21 +106,9 @@ function submit() {
       <input v-model="callbackAt" type="datetime-local" />
     </div>
 
-    <div v-if="outcome === 'booked'" class="card" style="margin-top: 0.75rem">
-      <h3>Bookkaus</h3>
-      <div class="grid2">
-        <div class="field"><label>Sovittu ajankohta</label><input v-model="bookingAt" type="datetime-local" /></div>
-        <div class="field"><label>Arvo (€, jos sovittu)</label><input v-model.number="bookingValue" type="number" min="0" step="1" /></div>
-      </div>
-      <div class="field"><label>Sovitut asiat</label><textarea v-model="bookingNotes" placeholder="Mitä sovittiin, kuka osallistuu, mitä lähetetään etukäteen…" /></div>
-    </div>
+    <BookingFields v-if="outcome === 'booked'" v-model="booking" style="margin-top: 0.75rem" />
 
     <div class="field" style="margin-top: 0.75rem">
-      <label>Muistiinpanot</label>
-      <textarea v-model="notes" placeholder="Mitä puhuttiin, kenet tavoitit, milloin kannattaa soittaa…" />
-    </div>
-
-    <div class="field">
       <label><input type="checkbox" v-model="addContact" style="width: auto; margin-right: 0.4rem" />Opin uuden yhteyshenkilön tai numeron</label>
       <div v-if="addContact" class="grid2">
         <input v-model="nc.name" placeholder="Nimi" />

@@ -8,7 +8,7 @@ const targets = ref<IntegrationTarget[]>([])
 const events = ref<OutboxEvent[]>([])
 const catalog = ref<{ kinds: string[]; event_types: string[] }>({ kinds: [], event_types: [] })
 const error = ref('')
-const form = ref({ kind: 'webhook', name: '', url: '', secret_env: '', base_url: '', path: '', event_types: '*' })
+const form = ref({ kind: 'webhook', name: '', url: '', secret_env: '', base_url: '', path: '', calendar_id: '', event_types: '*' })
 const deliveries = ref<Record<string, unknown>[]>([])
 const openTarget = ref<string | null>(null)
 
@@ -17,6 +17,7 @@ const KIND_HELP: Record<string, string> = {
   movingfirm_internal: 'Vie bookkaukset movingfirm-backendin sisäiseen API:in (MOVINGFIRM_BACKEND_URL + INTERNAL token envistä).',
   twenty: 'Peilaa yritykset ja bookkaukset Twenty CRM:ään (TWENTY_API_URL + avain envistä).',
   analytics: 'Kirjaa myyntitapahtumat olemassa olevaan ux_events-trackeriin (ANALYTICS_UX_EVENTS_URL).',
+  google_calendar: 'Vie bookatut tapaamiset yhteiseen Google-kalenteriin (service account GOOGLE_SERVICE_ACCOUNT_JSON; kalenteri jaettu sille). Peruutus poistaa tapahtuman.',
 }
 
 async function load() {
@@ -35,13 +36,13 @@ onMounted(load)
 async function create() {
   error.value = ''
   const config: Record<string, string> = {}
-  for (const k of ['url', 'secret_env', 'base_url', 'path'] as const) if (form.value[k]) config[k] = form.value[k]
+  for (const k of ['url', 'secret_env', 'base_url', 'path', 'calendar_id'] as const) if (form.value[k]) config[k] = form.value[k]
   try {
     await apiPost('/integrations/targets', {
       kind: form.value.kind, name: form.value.name, config,
       event_types: form.value.event_types.split(',').map((s) => s.trim()).filter(Boolean),
     })
-    form.value = { kind: 'webhook', name: '', url: '', secret_env: '', base_url: '', path: '', event_types: '*' }
+    form.value = { kind: 'webhook', name: '', url: '', secret_env: '', base_url: '', path: '', calendar_id: '', event_types: '*' }
     await load()
   } catch (e) {
     error.value = errorText(e)
@@ -82,6 +83,7 @@ async function retry(e: OutboxEvent) {
       <div v-if="form.kind === 'webhook' || form.kind === 'analytics'" class="field"><label>URL</label><input v-model="form.url" placeholder="https://…" /></div>
       <div v-if="form.kind === 'movingfirm_internal' || form.kind === 'twenty'" class="field"><label>Base URL (tyhjä = env)</label><input v-model="form.base_url" /></div>
       <div v-if="form.kind === 'movingfirm_internal'" class="field"><label>Polku</label><input v-model="form.path" placeholder="/api/internal/crm/sales-bookings" /></div>
+      <div v-if="form.kind === 'google_calendar'" class="field"><label>Kalenterin id (tyhjä = GOOGLE_CALENDAR_ID)</label><input v-model="form.calendar_id" placeholder="xxx@group.calendar.google.com" /></div>
       <div class="field"><label>Salaisuuden env-muuttuja (tyhjä = oletus)</label><input v-model="form.secret_env" placeholder="esim. CRM_WEBHOOK_SECRET" /></div>
       <div class="field"><label>Tapahtumat (pilkuilla; * = kaikki, booking.* = kaikki bookkaukset)</label><input v-model="form.event_types" /><div class="small muted">{{ catalog.event_types.join(', ') }}</div></div>
     </div>

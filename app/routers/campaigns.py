@@ -108,6 +108,7 @@ def enqueue(campaign_id: UUID, body: EnqueueIn, _: Principal = Depends(require_u
                        :prio
                 FROM companies c
                 WHERE c.status NOT IN ('do_not_call', 'disqualified')
+                  AND EXISTS (SELECT 1 FROM contacts ct WHERE ct.company_id=c.id AND NOT ct.do_not_call AND ct.phone_e164 IS NOT NULL)
                   AND (:ids IS NULL OR c.id = ANY(CAST(:ids AS uuid[])))
                   AND (:status IS NULL OR c.status = :status)
                   AND (:city IS NULL OR lower(c.city) = lower(:city))
@@ -120,4 +121,14 @@ def enqueue(campaign_id: UUID, body: EnqueueIn, _: Principal = Depends(require_u
                 "status": body.status, "city": body.city,
             },
         )
-    return {"enqueued": result.rowcount}
+    with db_conn() as conn:
+        skipped = 0
+        if body.company_ids:
+            skipped = conn.execute(
+                text(
+                    "SELECT count(*) FROM companies c WHERE c.id = ANY(CAST(:ids AS uuid[])) AND NOT EXISTS "
+                    "(SELECT 1 FROM contacts ct WHERE ct.company_id=c.id AND NOT ct.do_not_call AND ct.phone_e164 IS NOT NULL)"
+                ),
+                {"ids": [str(i) for i in body.company_ids]},
+            ).scalar()
+    return {"enqueued": result.rowcount, "skipped_no_phone": skipped}

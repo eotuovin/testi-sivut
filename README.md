@@ -151,6 +151,24 @@ vaativia työkaluja, ohjeistettu vastaamaan pelkällä JSONilla (prompt pyytää
 sitä ja parseri poimii ensimmäisen `{…}`-lohkon). Worker on liitetty
 `miragen-net`-verkkoon, joten agenttiin viitataan konttinimellä.
 
+## Muistiinpanot puhelun aikana ja kalenteri
+
+- Soita-näkymän muistiinpanokenttä **tallentuu automaattisesti** (`call_drafts`,
+  0,8 s viiveellä) – sivun lataus tai selaimen kaatuminen ei hukkaa mitään.
+  Lopputulosta kirjatessa luonnos siirtyy puhelun muistiinpanoiksi.
+- **Bookattu!** avaa tapaamislomakkeen: pikavalinnat seuraaville arkipäiville
+  (klo 10/14), kesto, paikka (Teams/Meet/puhelin/paikan päällä), linkki,
+  asiakkaan sähköposti, arvo, sovitut asiat.
+- Jokaisesta bookkauksesta saa **.ics-tiedoston** (`GET /api/bookings/{id}/ics`)
+  – avautuu Outlookissa, Googlessa ja Applessa, asiakas ATTENDEE-rivinä.
+- Integraatiokohde **`google_calendar`** vie tapaamisen yhteiseen Google-
+  kalenteriin service accountilla (`GOOGLE_SERVICE_ACCOUNT_JSON` +
+  `GOOGLE_CALENDAR_ID` tai kohteen `calendar_id`; kalenteri jaettava service
+  accountin sähköpostille). Siirto päivittää, peruutus poistaa tapahtuman.
+  Service account ei voi kutsua osallistujia ilman domain-wide delegationia,
+  joten asiakas saa kutsun .ics:nä.
+- Tilat: bookattu tapaaminen → yritys `qualified`; `completed` → `customer`.
+
 ## Prospektoinnin lähteet ja rajat
 
 - **PRH avoin data** (`avoindata.prh.fi`, ei avainta): nimi, Y-tunnus,
@@ -175,6 +193,7 @@ on silti pakollinen ja estää numeron kaikissa yrityksissä.
 `call_tasks` (jono), `calls`, `sales_bookings`, `prospecting_runs`,
 `prospects`, `outbox_events`, `integration_targets`, `integration_deliveries`.
 002: `users.phone_e164`, `call_sessions` (puhelinpalvelun legit), `prospects.enriched_by`.
+003: `call_drafts`, `sales_bookings.{duration_minutes,location,meeting_url,attendee_email,calendar_event_id,calendar_html_link}`, kohdetyyppi `google_calendar`.
 
 ## Seuraavat askeleet
 

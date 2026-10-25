@@ -87,6 +87,36 @@ def _task_view(conn, task_id: UUID) -> dict:
     return {**dict(row), "contacts": [dict(c) for c in contacts], "history": [dict(h) for h in history]}
 
 
+def _task_view_for(conn, task_id: UUID, user_id) -> dict:
+    view = _task_view(conn, task_id)
+    view["notes_draft"] = conn.execute(
+        text("SELECT notes FROM call_drafts WHERE task_id=:t AND user_id=:u"), {"t": task_id, "u": user_id}
+    ).scalar() or ""
+    return view
+
+
+class DraftIn(BaseModel):
+    notes: str = Field(max_length=8000)
+
+
+@router.put("/calls/tasks/{task_id}/draft")
+def save_draft(task_id: UUID, body: DraftIn, p: Principal = Depends(require_user)):
+    """Autosaved notes while the call is on. Survives a reload; folded into the outcome when logged."""
+    if p.id is None:
+        raise HTTPException(status_code=403, detail="a logged-in caller is required")
+    with db_conn() as conn:
+        if conn.execute(text("SELECT 1 FROM call_tasks WHERE id=:id"), {"id": task_id}).first() is None:
+            raise HTTPException(status_code=404, detail="task not found")
+        row = conn.execute(
+            text(
+                "INSERT INTO call_drafts (task_id, user_id, notes) VALUES (:t, :u, :n) "
+                "ON CONFLICT (task_id, user_id) DO UPDATE SET notes = EXCLUDED.notes, updated_at = now() RETURNING updated_at"
+            ),
+            {"t": task_id, "u": p.id, "n": body.notes},
+        ).mappings().one()
+    return {"saved_at": row["updated_at"]}
+
+
 @router.post("/calls/next")
 def next_task(campaign_id: UUID | None = None, p: Principal = Depends(require_user)):
     if p.id is None:
@@ -97,15 +127,15 @@ def next_task(campaign_id: UUID | None = None, p: Principal = Depends(require_us
         ).scalar()
         if task_id is None:
             return None
-        return _task_view(conn, task_id)
+        return _task_view_for(conn, task_id, p.id)
 
 
 @router.get("/calls/tasks/{task_id}")
-def get_task(task_id: UUID, _: Principal = Depends(require_read)):
+def get_task(task_id: UUID, p: Principal = Depends(require_read)):
     with db_conn() as conn:
         if conn.execute(text("SELECT 1 FROM call_tasks WHERE id=:id"), {"id": task_id}).first() is None:
             raise HTTPException(status_code=404, detail="task not found")
-        return _task_view(conn, task_id)
+        return _task_view_for(conn, task_id, p.id)
 
 
 @router.post("/calls/tasks/{task_id}/release")
@@ -126,6 +156,10 @@ def release_task(task_id: UUID, p: Principal = Depends(require_user)):
 
 class BookingIn(BaseModel):
     scheduled_at: datetime | None = None
+    duration_minutes: int = Field(default=30, ge=5, le=480)
+    location: str | None = Field(default=None, max_length=200)      # Teams / puhelin / osoite
+    meeting_url: str | None = Field(default=None, max_length=500)
+    attendee_email: str | None = Field(default=None, max_length=200)
     value_eur: float | None = Field(default=None, ge=0)
     notes: str | None = Field(default=None, max_length=4000)
 
@@ -185,6 +219,12 @@ def log_call(body: CallLogIn, p: Principal = Depends(require_user)):
             if campaign_id is None:
                 raise HTTPException(status_code=422, detail="no active campaign")
         contact_id = body.contact_id or (task["contact_id"] if task else None)
+        if task is not None:
+            draft = conn.execute(
+                text("DELETE FROM call_drafts WHERE task_id=:t AND user_id=:u RETURNING notes"), {"t": task["id"], "u": p.id}
+            ).scalar()
+            if not body.notes and draft:
+                body.notes = draft
 
         # The caller learned a new contact during the call (e.g. from a gatekeeper).
         if body.new_contact_phone or body.new_contact_name or body.new_contact_email:
@@ -226,20 +266,25 @@ def log_call(body: CallLogIn, p: Principal = Depends(require_user)):
             booking = conn.execute(
                 text(
                     """
-                    INSERT INTO sales_bookings (call_id, campaign_id, company_id, contact_id, user_id, scheduled_at, product, value_eur, notes)
-                    VALUES (:cid, :cpid, :coid, :ctid, :uid, :sched, :prod, :val, :notes) RETURNING *
+                    INSERT INTO sales_bookings (call_id, campaign_id, company_id, contact_id, user_id, scheduled_at, duration_minutes,
+                                                location, meeting_url, attendee_email, product, value_eur, notes)
+                    VALUES (:cid, :cpid, :coid, :ctid, :uid, :sched, :dur, :loc, :murl, :email, :prod, :val, :notes) RETURNING *
                     """
                 ),
                 {
                     "cid": call["id"], "cpid": campaign_id, "coid": company_id, "ctid": contact_id, "uid": p.id,
-                    "sched": body.booking.scheduled_at, "prod": product, "val": body.booking.value_eur, "notes": body.booking.notes,
+                    "sched": body.booking.scheduled_at, "dur": body.booking.duration_minutes, "loc": body.booking.location,
+                    "murl": body.booking.meeting_url, "email": body.booking.attendee_email,
+                    "prod": product, "val": body.booking.value_eur, "notes": body.booking.notes,
                 },
             ).mappings().one()
             company = conn.execute(text("SELECT name, business_id, website, city FROM companies WHERE id=:id"), {"id": company_id}).mappings().one()
             contact = conn.execute(text("SELECT name, phone_e164, email FROM contacts WHERE id=:id"), {"id": contact_id}).mappings().first() if contact_id else None
+            seller_email = conn.execute(text("SELECT email FROM users WHERE id=:id"), {"id": p.id}).scalar()
             emit(conn, "booking.created", "booking", booking["id"],
-                 {**dict(booking), "company": dict(company), "contact": dict(contact) if contact else None, "seller_name": p.name})
-            conn.execute(text("UPDATE companies SET status='customer' WHERE id=:id AND status <> 'customer'"), {"id": company_id})
+                 {**dict(booking), "company": dict(company), "contact": dict(contact) if contact else None,
+                  "seller_name": p.name, "seller_email": seller_email})
+            conn.execute(text("UPDATE companies SET status='qualified' WHERE id=:id AND status NOT IN ('customer')"), {"id": company_id})
         elif body.outcome == "do_not_call":
             phone = canonical_phone(body.phone_dialed) or (
                 conn.execute(text("SELECT phone_e164 FROM contacts WHERE id=:id"), {"id": contact_id}).scalar() if contact_id else None
@@ -328,6 +373,10 @@ def my_callbacks(p: Principal = Depends(require_user)):
 class BookingPatch(BaseModel):
     status: str | None = Field(default=None, pattern="^(booked|confirmed|completed|cancelled|no_show)$")
     scheduled_at: datetime | None = None
+    duration_minutes: int | None = Field(default=None, ge=5, le=480)
+    location: str | None = Field(default=None, max_length=200)
+    meeting_url: str | None = Field(default=None, max_length=500)
+    attendee_email: str | None = Field(default=None, max_length=200)
     value_eur: float | None = Field(default=None, ge=0)
     notes: str | None = Field(default=None, max_length=4000)
     external_refs: dict | None = None
@@ -358,18 +407,45 @@ def patch_booking(booking_id: UUID, body: BookingPatch, p: Principal = Depends(r
             text(
                 """
                 UPDATE sales_bookings SET status=COALESCE(:st,status), scheduled_at=COALESCE(:sched,scheduled_at),
+                    duration_minutes=COALESCE(:dur,duration_minutes), location=COALESCE(:loc,location),
+                    meeting_url=COALESCE(:murl,meeting_url), attendee_email=COALESCE(:email,attendee_email),
                     value_eur=COALESCE(:val,value_eur), notes=COALESCE(:notes,notes),
                     external_refs = external_refs || CAST(:refs AS jsonb)
                 WHERE id=:id RETURNING *
                 """
             ),
-            {"st": body.status, "sched": body.scheduled_at, "val": body.value_eur, "notes": body.notes,
+            {"st": body.status, "sched": body.scheduled_at, "dur": body.duration_minutes, "loc": body.location,
+             "murl": body.meeting_url, "email": body.attendee_email, "val": body.value_eur, "notes": body.notes,
              "refs": json.dumps(body.external_refs or {}), "id": booking_id},
         ).mappings().first()
         if row is None:
             raise HTTPException(status_code=404, detail="booking not found")
-        emit(conn, "booking.updated", "booking", booking_id, {**dict(row), "changed_by": p.name})
+        if body.status == "completed":
+            conn.execute(text("UPDATE companies SET status='customer' WHERE id=:id"), {"id": row["company_id"]})
+        company = conn.execute(text("SELECT name, business_id, website, city FROM companies WHERE id=:id"), {"id": row["company_id"]}).mappings().one()
+        contact = conn.execute(text("SELECT name, phone_e164, email FROM contacts WHERE id=:id"), {"id": row["contact_id"]}).mappings().first() if row["contact_id"] else None
+        emit(conn, "booking.updated", "booking", booking_id,
+             {**dict(row), "company": dict(company), "contact": dict(contact) if contact else None, "changed_by": p.name})
     return dict(row)
+
+
+@router.get("/bookings/{booking_id}/ics")
+def booking_ics(booking_id: UUID, _: Principal = Depends(require_read)):
+    """Calendar file for the meeting — opens in Outlook, Google and Apple Calendar."""
+    from fastapi.responses import Response
+
+    from app.services.calendar import booking_bundle, ics_for_booking
+
+    bundle = booking_bundle(booking_id)
+    if bundle is None:
+        raise HTTPException(status_code=404, detail="booking not found")
+    booking, company, contact, seller = bundle
+    if booking.get("scheduled_at") is None:
+        raise HTTPException(status_code=422, detail="Bookkauksella ei ole ajankohtaa")
+    ics = ics_for_booking(booking, company, contact, seller)
+    name = f"tapaaminen-{company['name'][:30].replace(' ', '_')}.ics"
+    return Response(content=ics, media_type="text/calendar; charset=utf-8",
+                    headers={"Content-Disposition": f'attachment; filename="{name}"'})
 
 
 @router.get("/stats/overview")

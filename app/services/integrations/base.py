@@ -201,3 +201,13 @@ ADAPTERS: dict[str, type[Adapter]] = {
     TwentyAdapter.kind: TwentyAdapter,
     AnalyticsAdapter.kind: AnalyticsAdapter,
 }
+
+
+def _register_calendar() -> None:
+    # imported late: calendar.py needs db_conn, base.py must stay import-light
+    from app.services.calendar import GoogleCalendarAdapter
+
+    ADAPTERS[GoogleCalendarAdapter.kind] = GoogleCalendarAdapter
+
+
+_register_calendar()

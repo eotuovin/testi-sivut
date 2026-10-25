@@ -85,6 +85,7 @@ export interface Task {
   contact_email: string | null
   contacts: Contact[]
   history: CallHistory[]
+  notes_draft?: string
 }
 
 export type Outcome =
@@ -101,7 +102,7 @@ export interface CallLog {
   duration_seconds?: number
   callback_at?: string | null
   notes?: string | null
-  booking?: { scheduled_at?: string | null; value_eur?: number | null; notes?: string | null }
+  booking?: { scheduled_at?: string | null; duration_minutes?: number; location?: string | null; meeting_url?: string | null; attendee_email?: string | null; value_eur?: number | null; notes?: string | null }
   new_contact_name?: string | null
   new_contact_title?: string | null
   new_contact_phone?: string | null
@@ -131,6 +132,11 @@ export interface Booking {
   contact_name?: string | null
   contact_phone?: string | null
   scheduled_at: string | null
+  duration_minutes?: number
+  location?: string | null
+  meeting_url?: string | null
+  attendee_email?: string | null
+  calendar_html_link?: string | null
   product: string
   value_eur: number | null
   status: 'booked' | 'confirmed' | 'completed' | 'cancelled' | 'no_show'

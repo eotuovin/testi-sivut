@@ -52,9 +52,9 @@ def test_full_loop_books_and_emits_events(admin_client, sales_client):
     campaign = _make_campaign(admin_client)
     company, contact = _make_company(admin_client)
     r = admin_client.post(f"/api/campaigns/{campaign['id']}/enqueue", json={"company_ids": [company["id"]]})
-    assert r.json() == {"enqueued": 1}
+    assert r.json() == {"enqueued": 1, "skipped_no_phone": 0}
     # idempotent
-    assert admin_client.post(f"/api/campaigns/{campaign['id']}/enqueue", json={"company_ids": [company["id"]]}).json() == {"enqueued": 0}
+    assert admin_client.post(f"/api/campaigns/{campaign['id']}/enqueue", json={"company_ids": [company["id"]]}).json()["enqueued"] == 0
 
     task = sales_client.post("/api/calls/next", params={"campaign_id": campaign["id"]}).json()
     assert task and task["company_id"] == company["id"] and task["contact_id"] == contact["id"]
@@ -95,7 +95,7 @@ def test_full_loop_books_and_emits_events(admin_client, sales_client):
             text("SELECT event_type FROM outbox_events WHERE aggregate_id IN (:b, :co) ORDER BY created_at"),
             {"b": booking["id"], "co": company["id"]},
         ).scalars().all()
-    assert t == "done" and c == "customer"
+    assert t == "done" and c == "qualified"  # a booked meeting; 'customer' only when the booking is completed
     assert "company.created" in events and "booking.created" in events
 
     stats = admin_client.get("/api/stats/overview", params={"days": 1}).json()
