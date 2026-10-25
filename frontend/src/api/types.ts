@@ -92,6 +92,7 @@ export type Outcome =
   | 'not_interested' | 'wrong_number' | 'booked' | 'do_not_call' | 'already_customer'
 
 export interface CallLog {
+  session_id?: string
   task_id?: string
   company_id?: string
   contact_id?: string | null

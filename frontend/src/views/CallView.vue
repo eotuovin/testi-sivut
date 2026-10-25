@@ -5,9 +5,12 @@ import { errorText } from '../api/client'
 import type { CallLog, Contact } from '../api/types'
 import { OUTCOME_LABELS } from '../api/types'
 import OutcomeForm from '../components/OutcomeForm.vue'
+import DialPanel from '../components/DialPanel.vue'
+import { useTelephonyStore } from '../stores/telephony'
 import { fmtDateTime } from '../format'
 
 const store = useCallsStore()
+const tel = useTelephonyStore()
 const error = ref('')
 const busy = ref(false)
 const selectedContactId = ref<string | null>(null)
@@ -17,7 +20,7 @@ let tick: number | undefined
 onMounted(async () => {
   tick = window.setInterval(() => (now.value = Date.now()), 1000)
   try {
-    await Promise.all([store.loadCampaigns(), store.loadCallbacks()])
+    await Promise.all([store.loadCampaigns(), store.loadCallbacks(), tel.load()])
   } catch (e) {
     error.value = errorText(e)
   }
@@ -49,7 +52,8 @@ async function submit(body: CallLog) {
   busy.value = true
   error.value = ''
   try {
-    await store.log({ ...body, contact_id: contact.value?.id ?? null, phone_dialed: contact.value?.phone_e164 ?? null })
+    await store.log({ ...body, contact_id: contact.value?.id ?? null, phone_dialed: contact.value?.phone_e164 ?? null, session_id: tel.session?.id ?? undefined })
+    tel.clear()
     await next()
   } catch (e) {
     error.value = errorText(e)
@@ -58,6 +62,7 @@ async function submit(body: CallLog) {
   }
 }
 async function release() {
+  tel.clear()
   await store.release()
 }
 </script>
@@ -103,7 +108,8 @@ async function release() {
           <a v-if="dialHref" :href="dialHref" class="phone" @click="store.startTimer()">📞 {{ contact.phone_e164 }}</a>
           <div v-else class="error">Ei puhelinnumeroa — lisää numero alla tai ohita.</div>
           <div v-if="contact.email" class="small"><a :href="'mailto:' + contact.email">{{ contact.email }}</a></div>
-          <div v-if="elapsed" class="timer muted small">Puhelu käynnissä {{ elapsed }}</div>
+          <div v-if="elapsed && !tel.session" class="timer muted small">Puhelu käynnissä {{ elapsed }}</div>
+          <DialPanel :task-id="store.task.id" :company-id="store.task.company_id" :contact-id="contact.id" :phone="contact.phone_e164" style="margin-top: 0.75rem" />
         </div>
         <div v-else class="error">Yrityksellä ei ole yhteystietoja.</div>
 

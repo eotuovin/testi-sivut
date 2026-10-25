@@ -48,7 +48,29 @@ def logout(response: Response):
 
 @router.get("/me")
 def me(p: Principal = Depends(current_principal)):
-    return {"id": str(p.id) if p.id else None, "name": p.name, "role": p.role, "scopes": list(p.scopes)}
+    phone = None
+    if p.id:
+        with db_conn() as conn:
+            phone = conn.execute(text("SELECT phone_e164 FROM users WHERE id=:id"), {"id": p.id}).scalar()
+    return {"id": str(p.id) if p.id else None, "name": p.name, "role": p.role, "scopes": list(p.scopes), "phone_e164": phone}
+
+
+class MePatch(BaseModel):
+    phone: str | None = Field(default=None, max_length=50, description="own phone; the provider rings this first")
+
+
+@router.patch("/me")
+def patch_me(body: MePatch, p: Principal = Depends(current_principal)):
+    if p.id is None:
+        raise HTTPException(status_code=403, detail="not a user")
+    from app.phone import canonical_phone
+
+    phone = canonical_phone(body.phone) if body.phone else None
+    if body.phone and (not phone or not (phone.startswith("+") and len(phone) >= 8)):
+        raise HTTPException(status_code=422, detail="Puhelinnumero ei kelpaa")
+    with db_conn() as conn:
+        conn.execute(text("UPDATE users SET phone_e164=:ph WHERE id=:id"), {"ph": phone, "id": p.id})
+    return {"phone_e164": phone}
 
 
 # ---------------------------------------------------------------- users (admin)

@@ -3,9 +3,15 @@ import { onMounted, ref } from 'vue'
 import { apiDelete, apiGet, apiPatch, apiPost, errorText } from '../api/client'
 import type { User } from '../api/types'
 import { fmtDateTime } from '../format'
+import { useTelephonyStore } from '../stores/telephony'
+import { useAuthStore } from '../stores/auth'
 
 interface ApiKey { id: string; name: string; scopes: string[]; active: boolean; created_at: string; last_used_at: string | null }
 
+const tel = useTelephonyStore()
+const auth = useAuthStore()
+const myPhone = ref('')
+const phoneSaved = ref('')
 const users = ref<User[]>([])
 const keys = ref<ApiKey[]>([])
 const error = ref('')
@@ -20,7 +26,21 @@ async function load() {
     error.value = errorText(e)
   }
 }
-onMounted(load)
+onMounted(async () => {
+  await tel.load()
+  myPhone.value = tel.myPhone ?? ''
+  if (auth.isAdmin) await load()
+})
+
+async function savePhone() {
+  error.value = ''
+  try {
+    await tel.saveMyPhone(myPhone.value)
+    phoneSaved.value = tel.myPhone ? `Tallennettu: ${tel.myPhone}` : 'Numero poistettu'
+  } catch (e) {
+    error.value = errorText(e)
+  }
+}
 
 async function create() {
   error.value = ''
@@ -54,8 +74,22 @@ async function revoke(k: ApiKey) {
 </script>
 
 <template>
-  <h1>Käyttäjät</h1>
+  <h1>Asetukset</h1>
   <p v-if="error" class="error">{{ error }}</p>
+  <div class="card">
+    <h2>Oma puhelinnumero</h2>
+    <p class="small muted">Kun soitat Luurilla, puhelinpalvelu soittaa ensin tähän numeroon ja yhdistää sitten asiakkaalle. Asiakas näkee yrityksen numeron, ei tätä.</p>
+    <div class="row">
+      <input v-model="myPhone" placeholder="esim. 045 123 4567" style="width: 220px" />
+      <button class="primary" @click="savePhone">Tallenna</button>
+      <span class="small muted">{{ phoneSaved }}</span>
+    </div>
+    <p v-if="tel.status" class="small muted" style="margin-top: 0.5rem">
+      Puhelinpalvelu: <strong>{{ tel.status.enabled ? tel.status.provider + ' · ' + tel.status.from_number : 'ei käytössä' }}</strong>
+      · Tekoäly: <strong>{{ tel.status.ai.provider === 'mira' ? 'Mira' + (tel.status.ai.agent ? ' (' + tel.status.ai.agent + ')' : '') + (tel.status.ai.reachable ? '' : ' – ei tavoitettavissa') : tel.status.ai.provider === 'anthropic' ? 'Claude' : 'ei käytössä (sääntöpohjainen poiminta)' }}</strong>
+    </p>
+  </div>
+  <template v-if="auth.isAdmin">
   <div class="grid2">
     <div class="card">
       <h2>Uusi käyttäjä</h2>
@@ -101,4 +135,5 @@ async function revoke(k: ApiKey) {
       </tr>
     </table>
   </div>
+  </template>
 </template>

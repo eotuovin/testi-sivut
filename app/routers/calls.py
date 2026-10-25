@@ -131,6 +131,7 @@ class BookingIn(BaseModel):
 
 
 class CallLogIn(BaseModel):
+    session_id: UUID | None = None  # telephony session this outcome belongs to
     task_id: UUID | None = None
     company_id: UUID | None = None
     contact_id: UUID | None = None
@@ -160,6 +161,15 @@ def log_call(body: CallLogIn, p: Principal = Depends(require_user)):
         raise HTTPException(status_code=422, detail="task_id or company_id is required")
 
     with db_conn() as conn:
+        session = None
+        if body.session_id is not None:
+            session = conn.execute(text("SELECT * FROM call_sessions WHERE id=:id AND user_id=:u"), {"id": body.session_id, "u": p.id}).mappings().first()
+            if session is None:
+                raise HTTPException(status_code=404, detail="call session not found")
+            if body.duration_seconds is None and session["duration_seconds"] is not None:
+                body.duration_seconds = session["duration_seconds"]
+            if body.phone_dialed is None:
+                body.phone_dialed = session["customer_number"]
         task = None
         if body.task_id is not None:
             task = conn.execute(
@@ -204,7 +214,11 @@ def log_call(body: CallLogIn, p: Principal = Depends(require_user)):
                 "cb": body.callback_at, "notes": body.notes,
             },
         ).mappings().one()
-        emit(conn, "call.logged", "call", call["id"], {**dict(call), "caller_name": p.name})
+        emit(conn, "call.logged", "call", call["id"], {**dict(call), "caller_name": p.name,
+                                                      "via": session["provider"] if session else "tel",
+                                                      "recording_url": session["recording_url"] if session else None})
+        if session is not None:
+            conn.execute(text("UPDATE call_sessions SET call_id=:c WHERE id=:id"), {"c": call["id"], "id": session["id"]})
 
         booking = None
         if body.outcome == "booked":

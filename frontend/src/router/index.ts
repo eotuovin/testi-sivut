@@ -9,7 +9,7 @@ export const NAV = [
   { path: '/raportit', name: 'raportit', label: 'Raportit', component: () => import('../views/ReportsView.vue') },
   { path: '/kampanjat', name: 'kampanjat', label: 'Kampanjat', component: () => import('../views/CampaignsView.vue'), admin: true },
   { path: '/integraatiot', name: 'integraatiot', label: 'Integraatiot', component: () => import('../views/IntegrationsView.vue'), admin: true },
-  { path: '/kayttajat', name: 'kayttajat', label: 'Käyttäjät', component: () => import('../views/UsersView.vue'), admin: true },
+  { path: '/kayttajat', name: 'kayttajat', label: 'Asetukset', component: () => import('../views/UsersView.vue') },
 ]
 
 const router = createRouter({

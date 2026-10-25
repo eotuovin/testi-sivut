@@ -64,6 +64,18 @@ services:
       TWENTY_API_KEY: ${TWENTY_API_KEY:-}
       WEBHOOK_SIGNING_SECRET: ${WEBHOOK_SIGNING_SECRET:-}
       ANALYTICS_UX_EVENTS_URL: ${ANALYTICS_UX_EVENTS_URL:-}
+      # Mira (Ilari's agent runtime): a miragen agent container on miragen-net.
+      # Set MIRA_AGENT_URL to that container, e.g. http://luuri-prospector:8080,
+      # and prospecting stops needing an Anthropic key.
+      MIRA_AGENT_URL: ${MIRA_AGENT_URL:-}
+      MIRA_AGENT_TOKEN: ${MIRA_AGENT_TOKEN:-}
+      # Telephony (bridged calls): provider rings the caller's own phone, then
+      # connects the customer. Customer sees TELEPHONY_FROM_NUMBER.
+      TELEPHONY_PROVIDER: ${TELEPHONY_PROVIDER:-}
+      TELEPHONY_FROM_NUMBER: ${TELEPHONY_FROM_NUMBER:-}
+      ELKS_API_USER: ${ELKS_API_USER:-}
+      ELKS_API_PASSWORD: ${ELKS_API_PASSWORD:-}
+      TELEPHONY_RECORD_CALLS: ${TELEPHONY_RECORD_CALLS:-false}
     networks:
       - luuri_internal
     depends_on:
@@ -94,14 +106,32 @@ services:
       TWENTY_API_KEY: ${TWENTY_API_KEY:-}
       WEBHOOK_SIGNING_SECRET: ${WEBHOOK_SIGNING_SECRET:-}
       ANALYTICS_UX_EVENTS_URL: ${ANALYTICS_UX_EVENTS_URL:-}
+      # Mira (Ilari's agent runtime): a miragen agent container on miragen-net.
+      # Set MIRA_AGENT_URL to that container, e.g. http://luuri-prospector:8080,
+      # and prospecting stops needing an Anthropic key.
+      MIRA_AGENT_URL: ${MIRA_AGENT_URL:-}
+      MIRA_AGENT_TOKEN: ${MIRA_AGENT_TOKEN:-}
+      # Telephony (bridged calls): provider rings the caller's own phone, then
+      # connects the customer. Customer sees TELEPHONY_FROM_NUMBER.
+      TELEPHONY_PROVIDER: ${TELEPHONY_PROVIDER:-}
+      TELEPHONY_FROM_NUMBER: ${TELEPHONY_FROM_NUMBER:-}
+      ELKS_API_USER: ${ELKS_API_USER:-}
+      ELKS_API_PASSWORD: ${ELKS_API_PASSWORD:-}
+      TELEPHONY_RECORD_CALLS: ${TELEPHONY_RECORD_CALLS:-false}
     networks:
       - luuri_internal
+      - miragen-net
     depends_on:
       migrate:
         condition: service_completed_successfully
 
 networks:
   luuri_internal:
+  miragen-net:
+    # miragend's network (stack `miragend`), where Mira agent containers live.
+    # Joined read-only in the sense that Luuri only makes HTTP calls to one
+    # agent; nothing here is published on it.
+    external: true
 
 volumes:
   luuri_db:

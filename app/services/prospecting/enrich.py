@@ -17,6 +17,7 @@ import httpx
 
 from app.config import settings
 from app.phone import find_phones
+from app.services import llm
 from app.services.prospecting.websearch import find_company_online
 
 log = logging.getLogger(__name__)
@@ -53,6 +54,7 @@ class Enrichment:
     fit_reason: str | None = None
     pages_fetched: int = 0
     website_source: str = "register"  # register | web_search | none
+    enriched_by: str = "rules"        # rules | mira | anthropic
     fetch_errors: list[str] = field(default_factory=list)
     error: str | None = None
 
@@ -136,15 +138,8 @@ def _deterministic_contacts(phones: list[str], emails: list[str]) -> list[Contac
     return out
 
 
-def _llm_extract(company_name: str, page_text: str, campaign_product: str | None) -> dict[str, Any] | None:
-    if not settings.ANTHROPIC_API_KEY:
-        return None
-    try:
-        import anthropic
-    except ImportError:
-        log.warning("anthropic package not installed; skipping LLM enrichment")
-        return None
-    prompt = (
+def _build_prompt(company_name: str, page_text: str, campaign_product: str | None) -> str:
+    return (
         "Olet B2B-myynnin assistentti. Alla on yrityksen verkkosivuilta poimittua tekstiä. "
         "Palauta VAIN JSON ilman selityksiä muodossa:\n"
         '{"summary": "1-2 lausetta mitä yritys tekee", '
@@ -155,15 +150,14 @@ def _llm_extract(company_name: str, page_text: str, campaign_product: str | None
         f"Myytävä tuote/palvelu: {campaign_product or 'ei annettu'}.\n\n"
         f"Yritys: {company_name}\n\nSivuteksti:\n{page_text[:9000]}"
     )
-    try:
-        client = anthropic.Anthropic(api_key=settings.ANTHROPIC_API_KEY)
-        msg = client.messages.create(model=settings.ANTHROPIC_MODEL, max_tokens=800, messages=[{"role": "user", "content": prompt}])
-        raw = "".join(block.text for block in msg.content if getattr(block, "type", "") == "text")
-        start, end = raw.find("{"), raw.rfind("}")
-        return json.loads(raw[start : end + 1]) if start >= 0 else None
-    except Exception as exc:  # noqa: BLE001 - enrichment must never break the run
-        log.warning("LLM enrichment failed for %s: %s", company_name, exc)
-        return None
+
+
+def _llm_extract(company_name: str, page_text: str, campaign_product: str | None) -> tuple[dict[str, Any] | None, str | None]:
+    """Returns (parsed json, provider name). Provider is None when no AI is configured."""
+    result = llm.complete_json(_build_prompt(company_name, page_text, campaign_product))
+    if result is None:
+        return None, None
+    return result.data, result.provider
 
 
 def enrich_company(name: str, website: str | None, campaign_product: str | None, client: httpx.Client | None = None, city: str | None = None) -> Enrichment:
@@ -190,12 +184,13 @@ def enrich_company(name: str, website: str | None, campaign_product: str | None,
                 result.contacts = _deterministic_contacts(result.phones, [])
             return result
         result.emails = [e for e in dict.fromkeys(e.lower() for e in _EMAIL_RE.findall(page_text)) if not _PLACEHOLDER_EMAIL_RE.search(e)][:8]
-        llm = _llm_extract(name, page_text, campaign_product)
-        if llm:
-            result.summary = llm.get("summary")
-            result.fit_score = llm.get("fit_score")
-            result.fit_reason = llm.get("fit_reason")
-            for c in llm.get("contacts") or []:
+        extracted, provider_name = _llm_extract(name, page_text, campaign_product)
+        if extracted:
+            result.enriched_by = provider_name or "rules"
+            result.summary = extracted.get("summary")
+            result.fit_score = extracted.get("fit_score")
+            result.fit_reason = extracted.get("fit_reason")
+            for c in extracted.get("contacts") or []:
                 if not isinstance(c, dict):
                     continue
                 result.contacts.append(ContactCandidate(

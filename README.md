@@ -117,6 +117,40 @@ muodossa:
 Admin-puolella nämä näkyvät `GET /internal/ux-events`-virrassa; funneliin
 lisääminen = uusi vertical `admin.funnel_stages`-migraatiolla (ei tehty tässä).
 
+## Soittaminen Luurilla (puhelinpalvelu)
+
+Oletuksena soitto on `tel:`-linkki (oma puhelin). Kun `TELEPHONY_PROVIDER=46elks`
+on asetettu, Soita-näkymässä on **Soita Luurilla** -nappi:
+
+1. Luuri pyytää 46elksiä soittamaan **soittajan omaan numeroon** (Asetukset →
+   Oma puhelinnumero; eSIM-numero käy).
+2. Kun soittaja vastaa, 46elks soittaa asiakkaalle ja yhdistää puhelut.
+   Asiakas näkee yrityksen numeron `TELEPHONY_FROM_NUMBER`, ei soittajan omaa.
+3. Worker seuraa puhelun tilaa (`call_sessions`), UI näyttää
+   "soitetaan sinulle → yhdistetään → käynnissä 1:23 → päättyi". Kesto ja
+   hinta tallentuvat ja lopputuloksen kirjaus linkittyy puheluun.
+
+Luuri on VPN:ssä ilman julkista osoitetta, joten webhookeja ei käytetä –
+tila haetaan pollaamalla. Nauhoitus: `TELEPHONY_RECORD_CALLS=true`
+(tarkista työsuhde-/tietosuojavaatimukset ennen käyttöönottoa).
+
+Tarvittavat tunnukset (Ilari asettaa stackiin): `ELKS_API_USER`,
+`ELKS_API_PASSWORD`, `TELEPHONY_FROM_NUMBER` (46elksistä ostettu
+suomalainen numero, ~3 €/kk; puhelut ~0,02–0,05 €/min per leg, kaksi legiä).
+Uusi operaattori = `Provider`-aliluokka `app/services/telephony/`.
+
+## Tekoäly: Mira ennen Anthropicia
+
+`app/services/llm.py` valitsee: `MIRA_AGENT_URL` asetettu → **Mira**
+(Ilarin agenttiajo, miragen-runner: `POST /run/async`, `GET /runs/{id}`,
+otsikko `X-Miragen-Token`), muuten `ANTHROPIC_API_KEY` → Claude suoraan,
+muuten sääntöpohjainen poiminta. Prospektiin tallentuu `enriched_by`.
+
+Mira-agentin vaatimukset: tekstipohjainen profiili ilman hyväksyntää
+vaativia työkaluja, ohjeistettu vastaamaan pelkällä JSONilla (prompt pyytää
+sitä ja parseri poimii ensimmäisen `{…}`-lohkon). Worker on liitetty
+`miragen-net`-verkkoon, joten agenttiin viitataan konttinimellä.
+
 ## Prospektoinnin lähteet ja rajat
 
 - **PRH avoin data** (`avoindata.prh.fi`, ei avainta): nimi, Y-tunnus,
@@ -135,11 +169,12 @@ lisääminen = uusi vertical `admin.funnel_stages`-migraatiolla (ei tehty täss�
 B2B-kylmäsoitto on Suomessa sallittua; ei-saa-soittaa-lista (`do_not_call`)
 on silti pakollinen ja estää numeron kaikissa yrityksissä.
 
-## Tietomalli (migrations/001_init.sql)
+## Tietomalli
 
-`users`, `api_keys`, `companies`, `contacts`, `do_not_call`, `campaigns`,
+001: `users`, `api_keys`, `companies`, `contacts`, `do_not_call`, `campaigns`,
 `call_tasks` (jono), `calls`, `sales_bookings`, `prospecting_runs`,
 `prospects`, `outbox_events`, `integration_targets`, `integration_deliveries`.
+002: `users.phone_e164`, `call_sessions` (puhelinpalvelun legit), `prospects.enriched_by`.
 
 ## Seuraavat askeleet
 

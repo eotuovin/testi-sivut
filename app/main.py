@@ -9,13 +9,13 @@ from sqlalchemy import text
 from app.auth import hash_password
 from app.config import settings
 from app.db import db_conn
-from app.routers import calls, campaigns, companies, integrations, prospecting, session
+from app.routers import calls, campaigns, companies, integrations, prospecting, session, telephony
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 
 app = FastAPI(title="Luuri – myyntipuhelut", version="0.1.0")
 
-for r in (session, companies, campaigns, calls, prospecting, integrations):
+for r in (session, companies, campaigns, calls, prospecting, integrations, telephony):
     app.include_router(r.router, prefix="/api")
 
 

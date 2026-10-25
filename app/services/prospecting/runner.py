@@ -74,10 +74,11 @@ def execute_run(run_id: UUID, campaign_id: UUID | None, criteria: dict) -> None:
                 with db_conn() as conn:
                     conn.execute(
                         text(
-                            "INSERT INTO prospects (run_id, business_id, name, data, found_contacts, score) "
-                            "VALUES (:r, :b, :n, CAST(:d AS jsonb), CAST(:fc AS jsonb), :s)"
+                            "INSERT INTO prospects (run_id, business_id, name, data, found_contacts, score, enriched_by) "
+                            "VALUES (:r, :b, :n, CAST(:d AS jsonb), CAST(:fc AS jsonb), :s, :eb)"
                         ),
-                        {"r": run_id, "b": rc.business_id, "n": rc.name, "d": json.dumps(data), "fc": json.dumps(found_contacts), "s": score},
+                        {"r": run_id, "b": rc.business_id, "n": rc.name, "d": json.dumps(data), "fc": json.dumps(found_contacts), "s": score,
+                         "eb": enrichment.enriched_by if enrichment else None},
                     )
                 stats["new"] += 1
         with db_conn() as conn:
