@@ -15,6 +15,7 @@ import httpx
 
 from app.config import settings
 from app.services.integrations.dispatcher import dispatch_one
+from app.services.intelligence import stt
 from app.services.intelligence.pipeline import tick as intelligence_tick
 from app.services.prospecting.runner import claim_next_run, execute_run
 from app.services.telephony.service import poll_active_sessions
@@ -42,6 +43,8 @@ def core_tick(client: httpx.Client) -> tuple[bool, int]:
 
 def main(mode: str = "all") -> None:
     log.info("luuri worker started (%s)", mode)
+    if mode in ("intelligence", "all"):
+        stt.warm_up()
     with httpx.Client(timeout=20.0) as client:
         while True:
             busy, active_calls = False, 0

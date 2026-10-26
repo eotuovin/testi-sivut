@@ -6,6 +6,7 @@ import pytest
 os.environ.setdefault("DATABASE_URL", "postgresql+psycopg2://postgres@/salesdesk?host=/tmp&port=5433")
 os.environ.setdefault("SESSION_SECRET", "test-secret")
 os.environ.setdefault("ENRICH_FETCH_WEBSITES", "false")
+os.environ.setdefault("STT_PROVIDER", "none")  # tests opt in per case; never download a model by accident
 
 from fastapi.testclient import TestClient  # noqa: E402
 from sqlalchemy import text  # noqa: E402

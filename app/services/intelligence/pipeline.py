@@ -110,6 +110,7 @@ def transcribe_one(client: httpx.Client | None = None) -> bool:
         return False
     try:
         t = stt.transcribe(bytes(row["audio"]), row["content_type"], client=client)
+        log.info("transcribed recording %s: %.0fs audio in %ss", row["id"], t.duration_seconds or 0, t.seconds_taken)
     except Exception as exc:  # noqa: BLE001
         with db_conn() as conn:
             conn.execute(
@@ -122,10 +123,10 @@ def transcribe_one(client: httpx.Client | None = None) -> bool:
         conn.execute(
             text(
                 "INSERT INTO call_transcripts (recording_id, call_id, language, text, segments, provider, model, purge_after) "
-                "VALUES (:r, :c, :l, :t, CAST(:seg AS jsonb), 'stt', :m, :p) ON CONFLICT (recording_id) DO NOTHING"
+                "VALUES (:r, :c, :l, :t, CAST(:seg AS jsonb), :prov, :m, :p) ON CONFLICT (recording_id) DO NOTHING"
             ),
             {"r": row["id"], "c": row["call_id"], "l": t.language, "t": t.text, "seg": json.dumps(t.segments),
-             "m": t.model, "p": purge_after},
+             "prov": stt.provider(), "m": t.model, "p": purge_after},
         )
         # Audio is not kept once we have text.
         conn.execute(

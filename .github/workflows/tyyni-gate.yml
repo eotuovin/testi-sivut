@@ -1,0 +1,72 @@
+# Tyyni as a merge-gate input, and the record auto-rollback reads.
+# Copied from ieepirzy/mirarun .github/workflows/tyyni-gate.yml (itself from
+# ieepirzy/tyyni examples/ci/tyyni-gate.yml, tyyni#36). The contract is
+# .tyyni/contract.json, pinned below by its sha256: change both together, in a
+# PR of their own.
+#
+# Static checkers only, under `pull_request_target`: the workflow, the
+# contract and its pin come from the base branch, so a PR cannot edit the job,
+# the pin, or its own `allow_contract`. The PR head is checked out into work/
+# only as files and git objects for Tyyni to read; nothing from it is
+# installed or run. Never add a step here that runs the PR's code.
+#
+# On push to main the same job judges what the push added (base_tip =
+# github.event.before) and posts on the main commit.
+#
+# Luuri's contract has one criterion: migrations a change adds under
+# migrations/ (sql_dir) are expand-only and re-run safe — the same rule as
+# movingfirm-backend. See docs/adr/0007-repository-ci-and-quality-gate.md.
+#
+# Branch protection: require `tyyni/verdict` with the GitHub Actions app as
+# the expected source.
+name: Tyyni gate
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened, edited]
+    branches: [main]
+  push:
+    branches: [main]
+permissions:
+  contents: read
+  checks: write
+jobs:
+  verify:
+    runs-on: mira-ci
+    timeout-minutes: 15
+    env:
+      # Same Tyyni commit as mirarun's gate; bump both together.
+      TYYNI_REF: "22c1065edd7715d9a083efa0ac29e1b2897e819e"
+      TYYNI_BASE_TIP: ${{ github.event.pull_request.base.sha || github.event.before }}
+      HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+    steps:
+      # The approved contract, from the base branch (or the pushed main commit).
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          path: trusted
+          ref: ${{ github.event.pull_request.base.sha || github.sha }}
+          persist-credentials: false
+      # The work, as data.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          path: work
+          repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
+          ref: ${{ env.HEAD_SHA }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          repository: ieepirzy/tyyni
+          ref: ${{ env.TYYNI_REF }}
+          token: ${{ secrets.TYYNI_READ_TOKEN }}
+          path: .tyyni
+          persist-credentials: false
+      - uses: ./.tyyni
+        with:
+          contract: trusted/.tyyni/contract.json
+          output: work
+          contract-sha256: "d93add3fe12ef625a251bb1e1cbb7c9c17f6ed8223c86cc95b9fa396de5adac2"
+          ref: ${{ env.TYYNI_REF }}
+          token: ${{ secrets.TYYNI_READ_TOKEN }}
+          check-runs: "true"
+          head-sha: ${{ env.HEAD_SHA }}
+          record-hmac-key: ${{ secrets.TYYNI_RECORD_HMAC_KEY }}

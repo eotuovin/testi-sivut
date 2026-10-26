@@ -36,8 +36,8 @@ def status(_: Principal = Depends(require_read)):
         ).mappings().one()
     return {
         "ai": llm.health(),
-        "stt": {"configured": stt.configured(), "model": settings.STT_MODEL if stt.configured() else None,
-                "language": settings.STT_LANGUAGE},
+        "stt": {"configured": stt.configured(), "provider": stt.provider(),
+                "model": settings.STT_MODEL if stt.configured() else None, "language": settings.STT_LANGUAGE},
         "recording_enabled": settings.TELEPHONY_RECORD_CALLS,
         "analyze_notes": settings.ANALYZE_NOTES,
         "transcript_retention_days": settings.TRANSCRIPT_RETENTION_DAYS,

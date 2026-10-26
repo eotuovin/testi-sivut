@@ -33,11 +33,16 @@ x-app-env: &app-env
   ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
   ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-claude-sonnet-4-5}
   BRAVE_SEARCH_API_KEY: ${BRAVE_SEARCH_API_KEY:-}
-  # Speech-to-text: any OpenAI-compatible /audio/transcriptions endpoint.
+  # Speech-to-text: faster-whisper in-process in `intelligence`, our own CPU
+  # (docs/adr/0003). openai-compatible only for a future self-hosted server.
+  STT_PROVIDER: ${STT_PROVIDER:-faster-whisper}
+  STT_MODEL: ${STT_MODEL:-deepdml/faster-whisper-large-v3-turbo-ct2}
+  STT_COMPUTE_TYPE: ${STT_COMPUTE_TYPE:-int8}
+  STT_CPU_THREADS: ${STT_CPU_THREADS:-2}
+  STT_LANGUAGE: ${STT_LANGUAGE:-fi}
+  STT_MODEL_DIR: /models
   STT_BASE_URL: ${STT_BASE_URL:-}
   STT_API_KEY: ${STT_API_KEY:-}
-  STT_MODEL: ${STT_MODEL:-Systran/faster-whisper-large-v3}
-  STT_LANGUAGE: ${STT_LANGUAGE:-fi}
   ANALYZE_NOTES: ${ANALYZE_NOTES:-true}
   TRANSCRIPT_RETENTION_DAYS: ${TRANSCRIPT_RETENTION_DAYS:-180}
   # Integrations
@@ -133,6 +138,17 @@ services:
     restart: unless-stopped
     hostname: luuri-intelligence
     environment: *app-env
+    volumes:
+      # faster-whisper model cache (~1.6 GB for large-v3-turbo), downloaded once.
+      - luuri_models:/models
+    # Shares the VPS with the production stacks: large-v3-turbo int8 peaks at
+    # ~2.1 GB RSS (measured 2026-10-26). Capped so a long transcription can
+    # never starve backend/admin; it just runs slower.
+    deploy:
+      resources:
+        limits:
+          cpus: "2"
+          memory: 3g
     networks:
       - luuri_internal
       - miragen-net
@@ -149,3 +165,4 @@ networks:
 
 volumes:
   luuri_db:
+  luuri_models:

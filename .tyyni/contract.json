@@ -1,0 +1,18 @@
+{
+  "id": "luuri-merge-gate",
+  "goal": "Every change merged to main keeps the previous release running on the migrated schema.",
+  "task_class": "code.backend",
+  "consequences": ["shared_state"],
+  "criteria": [
+    {
+      "id": "expand-only",
+      "kind": "constraint",
+      "text": "Every migration the change adds is expand-only and safe to re-run.",
+      "check": {"checker": "migration_safety", "params": {
+        "base": "c6c006177418e546c22d1be70305c7e5e5e96f4b",
+        "base_tip": "env:TYYNI_BASE_TIP",
+        "sources": [{"kind": "sql_dir", "path": "migrations"}]
+      }}
+    }
+  ]
+}

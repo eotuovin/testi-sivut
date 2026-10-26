@@ -1,5 +1,7 @@
 # Luuri – B2B-soittotyökalu
 
+> Päätökset ja perustelut: [`docs/adr/`](docs/adr/). Kokonaiskuva: [`docs/architecture.md`](docs/architecture.md).
+
 Ulossoittojärjestelmä (LeadDesk-tyylinen) Muutto365:n myyntipalvelulle:
 tekoäly prospektoi yritykset ja etsii päättäjän yhteystiedot, ihminen soittaa
 ja kirjaa, myydyt bookkaukset ja kaikki tapahtumat virtaavat CRM:ään ja muihin
@@ -171,9 +173,11 @@ nimeä ei saa vaihtaa vain toisessa).
    tiedoston (puhelimen oma nauhuri). **Käsitellään vain, jos soittaja
    vahvistaa kertoneensa tallennuksesta** (kampanjan `recording_notice`
    näytetään soittajalle). Muuten nauhoitetta ei haeta eikä tallenneta.
-2. **Litterointi** – mikä tahansa OpenAI-yhteensopiva
-   `/audio/transcriptions`-endpoint (`STT_BASE_URL`): oma faster-whisper
-   (speaches) omalla raudalla tai toimittaja DPA:n jälkeen. Kieli `fi`.
+2. **Litterointi** – **faster-whisper omalla CPU:lla** `intelligence`-workerissa
+   (`deepdml/faster-whisper-large-v3-turbo-ct2`, int8, kieli `fi`). Ei
+   maksullisia STT-rajapintoja, ääni ei lähde koneelta (ADR-0003). Malli
+   (~1,6 Gt) ladataan kerran `luuri_models`-volyymiin; kontti on rajattu
+   2 CPU / 3 Gt. Mitattu: ~1,5× reaaliaika kahdella ytimellä, ~2,1 Gt RAM.
    **Ääni poistetaan heti litteroinnin jälkeen.** Teksti poistetaan
    `TRANSCRIPT_RETENTION_DAYS` (180) päivän jälkeen; analyysi säilyy.
 3. **Analyysi** – `sales-call-analyst` palauttaa JSONin: tunnelma,

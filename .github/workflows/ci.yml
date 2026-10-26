@@ -1,0 +1,82 @@
+name: CI
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# A new push to a PR cancels its earlier run instead of holding mira-ci runners.
+concurrency:
+  group: ci-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  test:
+    name: pytest
+    runs-on: mira-ci
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: luuri
+          POSTGRES_PASSWORD: luuri
+          POSTGRES_DB: luuri
+        ports:
+          - 5432/tcp
+        options: >-
+          --health-cmd "pg_isready -U luuri -d luuri"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements*.txt
+      # The service publishes 5432 on a random port of the runner pod's
+      # in-pod Docker daemon (ARC dind), reachable on 127.0.0.1 (same as mirarun).
+      - name: Point DATABASE_URL at the published Postgres port
+        env:
+          POSTGRES_PORT: ${{ job.services.postgres.ports['5432'] }}
+        run: echo "DATABASE_URL=postgresql+psycopg2://luuri:luuri@127.0.0.1:${POSTGRES_PORT}/luuri" >> "$GITHUB_ENV"
+      - run: pip install -r requirements-dev.txt
+      # STT_PROVIDER=none comes from tests/conftest.py: CI never downloads a model.
+      - run: python -m pytest -q
+
+  frontend:
+    name: frontend type-check + build
+    runs-on: mira-ci
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm run build
+
+  migration-declarations:
+    name: Migration declarations
+    if: github.event_name == 'pull_request'
+    runs-on: mira-ci
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0 # the merge base with the base branch
+      - name: Check new migration files declare expand_only
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: python3 scripts/ci/check_migration_declarations.py --base "origin/$BASE_REF"

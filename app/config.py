@@ -33,14 +33,17 @@ class Settings(BaseSettings):
     MIRA_CALL_ANALYST_AGENT: str = "sales-call-analyst"
     MIRA_FUNNEL_ANALYST_AGENT: str = "sales-funnel-analyst"
 
-    # Call intelligence
-    # Speech-to-text through any OpenAI-compatible /v1/audio/transcriptions
-    # endpoint: a self-hosted faster-whisper server (speaches) on our own
-    # hardware, or a vendor. Unset = no transcription (notes are still analysed).
-    STT_BASE_URL: str | None = None            # e.g. http://whisper:8000/v1
-    STT_API_KEY: str | None = None
-    STT_MODEL: str = "Systran/faster-whisper-large-v3"
+    # Call intelligence — speech-to-text (docs/adr/0003-speech-to-text-faster-whisper.md).
+    # faster-whisper runs in-process in the `intelligence` worker on our own CPU.
+    STT_PROVIDER: str = "faster-whisper"      # faster-whisper | openai-compatible | none
+    STT_MODEL: str = "deepdml/faster-whisper-large-v3-turbo-ct2"
+    STT_MODEL_DIR: str = "/models"            # named volume; model downloaded once
+    STT_COMPUTE_TYPE: str = "int8"            # CPU: int8 keeps RAM ~2 GB for turbo
+    STT_CPU_THREADS: int = 4
+    STT_BEAM_SIZE: int = 5
     STT_LANGUAGE: str = "fi"
+    STT_BASE_URL: str | None = None           # only for STT_PROVIDER=openai-compatible
+    STT_API_KEY: str | None = None
     STT_TIMEOUT_SECONDS: float = 600.0
     ANALYZE_NOTES: bool = True                 # analyse the caller's notes when there is no transcript
     ANALYZE_MIN_NOTES_CHARS: int = 40
