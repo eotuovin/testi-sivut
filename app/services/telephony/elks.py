@@ -26,8 +26,10 @@ class ElksProvider(Provider):
     def dial(self, *, agent_number, customer_number, from_number, client):
         action: dict = {"connect": customer_number, "timeout": "45"}
         if settings.TELEPHONY_RECORD_CALLS:
-            action = {"recordcall": "true", "next": None, **action}  # recordcall may sit at any level
-            action.pop("next")
+            # 46elks POSTs the finished recording to this URL; Luuri is VPN-only
+            # and cannot receive it, so it is a placeholder and the worker lists
+            # GET /recordings by callid instead (fetch only after consent).
+            action["recordcall"] = settings.TELEPHONY_RECORDING_WEBHOOK
         try:
             r = client.post(
                 f"{settings.ELKS_API_BASE}/calls",
@@ -89,3 +91,25 @@ class ElksProvider(Provider):
             return r.status_code < 400
         except httpx.HTTPError:
             return False
+
+    def find_recording(self, provider_call_id: str, client: httpx.Client) -> dict | None:
+        """The recording of one call, from the account's recording history."""
+        try:
+            r = client.get(f"{settings.ELKS_API_BASE}/recordings", auth=self._auth())
+        except httpx.HTTPError:
+            return None
+        if r.status_code >= 400:
+            return None
+        for rec in (r.json().get("data") or []):
+            if rec.get("callid") == provider_call_id:
+                return rec
+        return None
+
+    def download(self, url: str, client: httpx.Client) -> tuple[bytes, str] | None:
+        try:
+            r = client.get(url, auth=self._auth(), follow_redirects=True)
+        except httpx.HTTPError:
+            return None
+        if r.status_code >= 400:
+            return None
+        return r.content, r.headers.get("content-type", "audio/wav")

@@ -7,6 +7,7 @@ export const NAV = [
   { path: '/prospektointi', name: 'prospektointi', label: 'Prospektointi', component: () => import('../views/ProspectingView.vue') },
   { path: '/bookkaukset', name: 'bookkaukset', label: 'Bookkaukset', component: () => import('../views/BookingsView.vue') },
   { path: '/raportit', name: 'raportit', label: 'Raportit', component: () => import('../views/ReportsView.vue') },
+  { path: '/oivallukset', name: 'oivallukset', label: 'Oivallukset', component: () => import('../views/InsightsView.vue') },
   { path: '/kampanjat', name: 'kampanjat', label: 'Kampanjat', component: () => import('../views/CampaignsView.vue'), admin: true },
   { path: '/integraatiot', name: 'integraatiot', label: 'Integraatiot', component: () => import('../views/IntegrationsView.vue'), admin: true },
   { path: '/kayttajat', name: 'kayttajat', label: 'Asetukset', component: () => import('../views/UsersView.vue') },

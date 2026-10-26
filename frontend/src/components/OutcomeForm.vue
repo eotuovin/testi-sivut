@@ -5,7 +5,8 @@ import { OUTCOME_LABELS } from '../api/types'
 import { apiPut, errorText } from '../api/client'
 import BookingFields, { type BookingDraft, emptyBooking } from './BookingFields.vue'
 
-const props = defineProps<{ taskId: string; contacts: Contact[]; contactId: string | null; phone: string | null; busy: boolean; initialNotes: string }>()
+const props = defineProps<{ taskId: string; contacts: Contact[]; contactId: string | null; phone: string | null; busy: boolean; initialNotes: string; recording?: boolean }>()
+const consent = ref(false)
 const emit = defineEmits<{ (e: 'submit', body: CallLog): void }>()
 
 const ORDER: Outcome[] = ['no_answer', 'busy', 'voicemail', 'gatekeeper', 'callback', 'not_interested', 'already_customer', 'wrong_number', 'do_not_call', 'booked']
@@ -60,7 +61,7 @@ const canSubmit = computed(() => {
 function submit() {
   if (!outcome.value) return
   window.clearTimeout(timer)
-  const body: CallLog = { outcome: outcome.value, notes: notes.value || null, contact_id: props.contactId, phone_dialed: props.phone }
+  const body: CallLog = { outcome: outcome.value, notes: notes.value || null, contact_id: props.contactId, phone_dialed: props.phone, recording_consent: !!props.recording && consent.value }
   if (outcome.value === 'callback') body.callback_at = new Date(callbackAt.value).toISOString()
   if (outcome.value === 'booked') {
     const b = booking.value
@@ -118,6 +119,9 @@ function submit() {
       </div>
     </div>
 
+    <div v-if="recording" class="field">
+      <label><input type="checkbox" v-model="consent" style="width: auto; margin-right: 0.4rem" />Kerroin asiakkaalle, että puhelu tallennetaan (muuten nauhoitetta ei käsitellä)</label>
+    </div>
     <p v-if="error" class="error small">{{ error }}</p>
     <button class="primary big" :disabled="!canSubmit || busy" @click="submit">Tallenna ja seuraava →</button>
   </div>

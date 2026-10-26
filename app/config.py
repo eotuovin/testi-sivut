@@ -26,6 +26,26 @@ class Settings(BaseSettings):
     MIRA_AGENT_TOKEN: str | None = None     # X-Miragen-Token, if the runner guards /run
     MIRA_RUN_TIMEOUT_SECONDS: float = 240.0
     MIRA_POLL_SECONDS: float = 2.5
+    # The mirarun hub (preferred): agent sessions API, mirarun ADR-035.
+    MIRARUN_URL: str | None = None             # e.g. http://10.8.0.4:8083
+    MIRARUN_SESSION_TOKEN: str | None = None   # Luuri's entry in MIRARUN_SESSION_CLIENT_TOKENS
+    MIRA_PROSPECTOR_AGENT: str = "luuri-prospector"
+    MIRA_CALL_ANALYST_AGENT: str = "sales-call-analyst"
+    MIRA_FUNNEL_ANALYST_AGENT: str = "sales-funnel-analyst"
+
+    # Call intelligence
+    # Speech-to-text through any OpenAI-compatible /v1/audio/transcriptions
+    # endpoint: a self-hosted faster-whisper server (speaches) on our own
+    # hardware, or a vendor. Unset = no transcription (notes are still analysed).
+    STT_BASE_URL: str | None = None            # e.g. http://whisper:8000/v1
+    STT_API_KEY: str | None = None
+    STT_MODEL: str = "Systran/faster-whisper-large-v3"
+    STT_LANGUAGE: str = "fi"
+    STT_TIMEOUT_SECONDS: float = 600.0
+    ANALYZE_NOTES: bool = True                 # analyse the caller's notes when there is no transcript
+    ANALYZE_MIN_NOTES_CHARS: int = 40
+    TRANSCRIPT_RETENTION_DAYS: int = 180       # transcript text is deleted after this; the analysis stays
+    RECORDING_MAX_BYTES: int = 100 * 1024 * 1024
     ENRICH_FETCH_WEBSITES: bool = True
     ENRICH_TIMEOUT_SECONDS: float = 8.0
 
@@ -51,13 +71,15 @@ class Settings(BaseSettings):
     ELKS_API_BASE: str = "https://api.46elks.com/a1"
     TELEPHONY_AGENT_TIMEOUT_SECONDS: int = 25   # how long the caller's phone rings
     TELEPHONY_RECORD_CALLS: bool = False
+    TELEPHONY_RECORDING_WEBHOOK: str = "https://luuri.invalid/recording"  # placeholder, see elks.py
 
     @field_validator(
         "BOOTSTRAP_ADMIN_EMAIL", "BOOTSTRAP_ADMIN_PASSWORD", "ANTHROPIC_API_KEY", "BRAVE_SEARCH_API_KEY",
         "MOVINGFIRM_BACKEND_URL", "MOVINGFIRM_INTERNAL_TOKEN", "TWENTY_API_URL",
         "TWENTY_API_KEY", "WEBHOOK_SIGNING_SECRET", "ANALYTICS_UX_EVENTS_URL",
         "MIRA_AGENT_URL", "MIRA_AGENT_TOKEN", "TELEPHONY_PROVIDER", "TELEPHONY_FROM_NUMBER",
-        "ELKS_API_USER", "ELKS_API_PASSWORD",
+        "ELKS_API_USER", "ELKS_API_PASSWORD", "MIRARUN_URL", "MIRARUN_SESSION_TOKEN",
+        "STT_BASE_URL", "STT_API_KEY",
         mode="before",
     )
     @classmethod

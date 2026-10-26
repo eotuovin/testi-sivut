@@ -176,6 +176,13 @@ class AnalyticsAdapter(Adapter):
             "booking_status": p.get("status") if event["aggregate_type"] == "booking" else None,
             "value_eur": p.get("value_eur"),
             "caller": p.get("caller_name") or p.get("seller_name"),
+            # call.analyzed — the structured analysis, never the text itself
+            "analysis_source": p.get("source") if event["event_type"] == "call.analyzed" else None,
+            "sentiment": p.get("sentiment"),
+            "interest_level": p.get("interest_level"),
+            "stage_reached": p.get("stage_reached"),
+            "objection_categories": p.get("objection_categories"),
+            "blocker_categories": p.get("blocker_categories"),
         }
         body = {
             "session_id": f"luuri-{p.get('company_id') or event['aggregate_id']}",

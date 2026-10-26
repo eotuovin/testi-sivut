@@ -43,6 +43,7 @@ export interface Campaign {
   name: string
   product: string
   script: string | null
+  recording_notice?: string | null
   status: 'draft' | 'active' | 'paused' | 'archived'
   max_attempts: number
   retry_after_minutes: number
@@ -68,6 +69,7 @@ export interface Task {
   campaign_name: string
   product: string
   script: string | null
+  recording_notice?: string | null
   max_attempts: number
   company_id: string
   company_name: string
@@ -107,6 +109,7 @@ export interface CallLog {
   new_contact_title?: string | null
   new_contact_phone?: string | null
   new_contact_email?: string | null
+  recording_consent?: boolean
 }
 
 export interface CallRow {

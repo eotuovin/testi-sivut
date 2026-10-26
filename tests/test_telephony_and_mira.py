@@ -193,11 +193,11 @@ def test_mira_client_and_enrichment(monkeypatch):
     monkeypatch.setattr(settings, "MIRA_POLL_SECONDS", 0.05)
     monkeypatch.setattr(settings, "ANTHROPIC_API_KEY", "should-not-be-used")
     try:
-        assert llm.provider() == "mira"
+        assert llm.provider() == "miragen"
         h = llm.health()
         assert h["reachable"] and h["agent"] == "luuri-prospector"
         res = llm.complete_json("Palauta JSON")
-        assert res.provider == "mira" and res.data["summary"] == "Tekee sähkötöitä" and res.error is None
+        assert res.provider == "miragen" and res.data["summary"] == "Tekee sähkötöitä" and res.error is None
 
         # enrichment uses it and marks provenance
         from app.services.prospecting import enrich
@@ -216,7 +216,7 @@ def test_mira_client_and_enrichment(monkeypatch):
 
         monkeypatch.setattr(enrich.settings, "ENRICH_FETCH_WEBSITES", True)
         e = enrich.enrich_company("Sähkö-Mesta Oy", "sahkomesta.fi", "Testipalvelu", client=C())
-        assert e.enriched_by == "mira" and e.fit_score == 0.7 and e.contacts[0].name == "Matti Sähkö"
+        assert e.enriched_by == "miragen" and e.fit_score == 0.7 and e.contacts[0].name == "Matti Sähkö"
         assert "Sähkö-Mesta Oy" in FakeMira.prompts[-1] and "Testipalvelu" in FakeMira.prompts[-1]
 
         # agent not ready → graceful fallback to rules

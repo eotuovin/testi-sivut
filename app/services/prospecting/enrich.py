@@ -54,7 +54,7 @@ class Enrichment:
     fit_reason: str | None = None
     pages_fetched: int = 0
     website_source: str = "register"  # register | web_search | none
-    enriched_by: str = "rules"        # rules | mira | anthropic
+    enriched_by: str = "rules"        # rules | mirarun | miragen | anthropic
     fetch_errors: list[str] = field(default_factory=list)
     error: str | None = None
 
@@ -154,7 +154,7 @@ def _build_prompt(company_name: str, page_text: str, campaign_product: str | Non
 
 def _llm_extract(company_name: str, page_text: str, campaign_product: str | None) -> tuple[dict[str, Any] | None, str | None]:
     """Returns (parsed json, provider name). Provider is None when no AI is configured."""
-    result = llm.complete_json(_build_prompt(company_name, page_text, campaign_product))
+    result = llm.complete_json(_build_prompt(company_name, page_text, campaign_product), task="prospect")
     if result is None:
         return None, None
     return result.data, result.provider

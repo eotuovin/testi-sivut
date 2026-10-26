@@ -55,7 +55,7 @@ RETURNING t.id
 
 TASK_VIEW_SQL = """
 SELECT t.id, t.status, t.attempts, t.due_at, t.last_outcome, t.locked_until,
-       cp.id AS campaign_id, cp.name AS campaign_name, cp.product, cp.script, cp.max_attempts,
+       cp.id AS campaign_id, cp.name AS campaign_name, cp.product, cp.script, cp.max_attempts, cp.recording_notice,
        co.id AS company_id, co.name AS company_name, co.business_id, co.website, co.city, co.industry_label,
        co.status AS company_status, co.notes AS company_notes,
        ct.id AS contact_id, ct.name AS contact_name, ct.title AS contact_title, ct.phone AS contact_phone,
@@ -179,6 +179,7 @@ class CallLogIn(BaseModel):
     new_contact_title: str | None = Field(default=None, max_length=200)
     new_contact_phone: str | None = Field(default=None, max_length=50)
     new_contact_email: str | None = Field(default=None, max_length=200)
+    recording_consent: bool = False  # caller confirms the customer was told the call is recorded
 
 
 @router.post("/calls", status_code=201)
@@ -258,7 +259,16 @@ def log_call(body: CallLogIn, p: Principal = Depends(require_user)):
                                                       "via": session["provider"] if session else "tel",
                                                       "recording_url": session["recording_url"] if session else None})
         if session is not None:
-            conn.execute(text("UPDATE call_sessions SET call_id=:c WHERE id=:id"), {"c": call["id"], "id": session["id"]})
+            conn.execute(text("UPDATE call_sessions SET call_id=:c, recording_consent=:rc WHERE id=:id"),
+                         {"c": call["id"], "rc": body.recording_consent, "id": session["id"]})
+            # an uploaded/fetched recording made before the outcome was logged
+            conn.execute(text("UPDATE call_recordings SET call_id=:c WHERE session_id=:s AND call_id IS NULL"),
+                         {"c": call["id"], "s": session["id"]})
+        if body.recording_consent:
+            conn.execute(text("UPDATE calls SET recording_consent=true WHERE id=:id"), {"id": call["id"]})
+        from app.services.intelligence.pipeline import maybe_queue_notes_analysis
+
+        maybe_queue_notes_analysis(conn, dict(call))
 
         booking = None
         if body.outcome == "booked":

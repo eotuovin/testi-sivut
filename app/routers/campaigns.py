@@ -16,6 +16,7 @@ class CampaignIn(BaseModel):
     name: str = Field(min_length=1, max_length=200)
     product: str = Field(min_length=1, max_length=200)
     script: str | None = Field(default=None, max_length=20000)
+    recording_notice: str | None = Field(default=None, max_length=500)
     max_attempts: int = Field(default=4, ge=1, le=20)
     retry_after_minutes: int = Field(default=240, ge=5, le=10080)
 
@@ -24,6 +25,7 @@ class CampaignPatch(BaseModel):
     name: str | None = None
     product: str | None = None
     script: str | None = None
+    recording_notice: str | None = Field(default=None, max_length=500)
     status: str | None = Field(default=None, pattern="^(draft|active|paused|archived)$")
     max_attempts: int | None = Field(default=None, ge=1, le=20)
     retry_after_minutes: int | None = Field(default=None, ge=5, le=10080)
@@ -51,10 +53,10 @@ def create_campaign(body: CampaignIn, _: Principal = Depends(require_admin)):
     with db_conn() as conn:
         row = conn.execute(
             text(
-                "INSERT INTO campaigns (name, product, script, max_attempts, retry_after_minutes) "
-                "VALUES (:n, :p, :s, :ma, :ra) RETURNING *"
+                "INSERT INTO campaigns (name, product, script, recording_notice, max_attempts, retry_after_minutes) "
+                "VALUES (:n, :p, :s, :rn, :ma, :ra) RETURNING *"
             ),
-            {"n": body.name, "p": body.product, "s": body.script, "ma": body.max_attempts, "ra": body.retry_after_minutes},
+            {"n": body.name, "p": body.product, "s": body.script, "rn": body.recording_notice, "ma": body.max_attempts, "ra": body.retry_after_minutes},
         ).mappings().one()
     return dict(row)
 
@@ -67,13 +69,14 @@ def patch_campaign(campaign_id: UUID, body: CampaignPatch, _: Principal = Depend
                 """
                 UPDATE campaigns SET
                   name = COALESCE(:n, name), product = COALESCE(:p, product), script = COALESCE(:s, script),
+                  recording_notice = COALESCE(:rn, recording_notice),
                   status = COALESCE(:st, status), max_attempts = COALESCE(:ma, max_attempts),
                   retry_after_minutes = COALESCE(:ra, retry_after_minutes)
                 WHERE id=:id RETURNING *
                 """
             ),
             {
-                "n": body.name, "p": body.product, "s": body.script, "st": body.status,
+                "n": body.name, "p": body.product, "s": body.script, "rn": body.recording_notice, "st": body.status,
                 "ma": body.max_attempts, "ra": body.retry_after_minutes, "id": campaign_id,
             },
         ).mappings().first()

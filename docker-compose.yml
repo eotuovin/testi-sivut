@@ -2,15 +2,60 @@
 # movingfirm stacks: db → one-shot migrate → app services.
 #
 # Images are built on the host from this checkout for now (the `build:` lines).
-# Follow-up: a CI workflow that publishes ghcr.io/muutto365/luuri and a
-# LUURI_IMAGE_TAG indirection like movingfirm-admin, so the host compiles
-# nothing.
+# Follow-up: a CI workflow that publishes the image by digest (infra ADR-0007)
+# so the host compiles nothing.
 #
 # VPN-only like movingfirm-admin: the web service binds to the WireGuard
 # address (LUURI_BIND, default 10.8.0.4:6770) and has no public route. Public
-# authentication is meant to go through Keycloak later; until then nothing
-# here is reachable outside the VPN. The database stays on a project-local
-# network only.
+# authentication goes through Keycloak later; until then nothing here is
+# reachable outside the VPN. The database stays on a project-local network.
+#
+# Every variable the app reads is declared ONCE in x-app-env and shared by all
+# app services: a variable set in Portainer but not declared here never
+# reaches a container (movingfirm-admin #57/#58).
+
+x-app-env: &app-env
+  DATABASE_URL: postgresql+psycopg2://luuri:${POSTGRES_PASSWORD}@db:5432/luuri
+  SESSION_SECRET: ${SESSION_SECRET}
+  BOOTSTRAP_ADMIN_EMAIL: ${BOOTSTRAP_ADMIN_EMAIL:-}
+  BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:-}
+  # AI. Preferred: the mirarun hub's agent sessions API (mirarun ADR-035).
+  # MIRARUN_SESSION_TOKEN is Luuri's entry in mirarun's MIRARUN_SESSION_CLIENT_TOKENS.
+  MIRARUN_URL: ${MIRARUN_URL:-}
+  MIRARUN_SESSION_TOKEN: ${MIRARUN_SESSION_TOKEN:-}
+  MIRA_PROSPECTOR_AGENT: ${MIRA_PROSPECTOR_AGENT:-luuri-prospector}
+  MIRA_CALL_ANALYST_AGENT: ${MIRA_CALL_ANALYST_AGENT:-sales-call-analyst}
+  MIRA_FUNNEL_ANALYST_AGENT: ${MIRA_FUNNEL_ANALYST_AGENT:-sales-funnel-analyst}
+  # Legacy: one miragen agent container called directly on miragen-net.
+  MIRA_AGENT_URL: ${MIRA_AGENT_URL:-}
+  MIRA_AGENT_TOKEN: ${MIRA_AGENT_TOKEN:-}
+  # Last resort when no Mira is configured.
+  ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+  ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-claude-sonnet-4-5}
+  BRAVE_SEARCH_API_KEY: ${BRAVE_SEARCH_API_KEY:-}
+  # Speech-to-text: any OpenAI-compatible /audio/transcriptions endpoint.
+  STT_BASE_URL: ${STT_BASE_URL:-}
+  STT_API_KEY: ${STT_API_KEY:-}
+  STT_MODEL: ${STT_MODEL:-Systran/faster-whisper-large-v3}
+  STT_LANGUAGE: ${STT_LANGUAGE:-fi}
+  ANALYZE_NOTES: ${ANALYZE_NOTES:-true}
+  TRANSCRIPT_RETENTION_DAYS: ${TRANSCRIPT_RETENTION_DAYS:-180}
+  # Integrations
+  MOVINGFIRM_BACKEND_URL: ${MOVINGFIRM_BACKEND_URL:-}
+  MOVINGFIRM_INTERNAL_TOKEN: ${MOVINGFIRM_INTERNAL_TOKEN:-}
+  TWENTY_API_URL: ${TWENTY_API_URL:-}
+  TWENTY_API_KEY: ${TWENTY_API_KEY:-}
+  WEBHOOK_SIGNING_SECRET: ${WEBHOOK_SIGNING_SECRET:-}
+  ANALYTICS_UX_EVENTS_URL: ${ANALYTICS_UX_EVENTS_URL:-}
+  GOOGLE_SERVICE_ACCOUNT_JSON: ${GOOGLE_SERVICE_ACCOUNT_JSON:-}
+  GOOGLE_CALENDAR_ID: ${GOOGLE_CALENDAR_ID:-}
+  # Telephony (bridged calls): provider rings the caller's own phone, then
+  # connects the customer. Customer sees TELEPHONY_FROM_NUMBER.
+  TELEPHONY_PROVIDER: ${TELEPHONY_PROVIDER:-}
+  TELEPHONY_FROM_NUMBER: ${TELEPHONY_FROM_NUMBER:-}
+  ELKS_API_USER: ${ELKS_API_USER:-}
+  ELKS_API_PASSWORD: ${ELKS_API_PASSWORD:-}
+  TELEPHONY_RECORD_CALLS: ${TELEPHONY_RECORD_CALLS:-false}
 
 services:
   db:
@@ -50,32 +95,7 @@ services:
     restart: unless-stopped
     ports:
       - "${LUURI_BIND:-10.8.0.4:6770}:8000"
-    environment:
-      DATABASE_URL: postgresql+psycopg2://luuri:${POSTGRES_PASSWORD}@db:5432/luuri
-      SESSION_SECRET: ${SESSION_SECRET}
-      BOOTSTRAP_ADMIN_EMAIL: ${BOOTSTRAP_ADMIN_EMAIL:-}
-      BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:-}
-      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
-      ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-claude-sonnet-4-5}
-      BRAVE_SEARCH_API_KEY: ${BRAVE_SEARCH_API_KEY:-}
-      MOVINGFIRM_BACKEND_URL: ${MOVINGFIRM_BACKEND_URL:-}
-      MOVINGFIRM_INTERNAL_TOKEN: ${MOVINGFIRM_INTERNAL_TOKEN:-}
-      TWENTY_API_URL: ${TWENTY_API_URL:-}
-      TWENTY_API_KEY: ${TWENTY_API_KEY:-}
-      WEBHOOK_SIGNING_SECRET: ${WEBHOOK_SIGNING_SECRET:-}
-      ANALYTICS_UX_EVENTS_URL: ${ANALYTICS_UX_EVENTS_URL:-}
-      # Mira (Ilari's agent runtime): a miragen agent container on miragen-net.
-      # Set MIRA_AGENT_URL to that container, e.g. http://luuri-prospector:8080,
-      # and prospecting stops needing an Anthropic key.
-      MIRA_AGENT_URL: ${MIRA_AGENT_URL:-}
-      MIRA_AGENT_TOKEN: ${MIRA_AGENT_TOKEN:-}
-      # Telephony (bridged calls): provider rings the caller's own phone, then
-      # connects the customer. Customer sees TELEPHONY_FROM_NUMBER.
-      TELEPHONY_PROVIDER: ${TELEPHONY_PROVIDER:-}
-      TELEPHONY_FROM_NUMBER: ${TELEPHONY_FROM_NUMBER:-}
-      ELKS_API_USER: ${ELKS_API_USER:-}
-      ELKS_API_PASSWORD: ${ELKS_API_PASSWORD:-}
-      TELEPHONY_RECORD_CALLS: ${TELEPHONY_RECORD_CALLS:-false}
+    environment: *app-env
     networks:
       - luuri_internal
     depends_on:
@@ -88,41 +108,31 @@ services:
       retries: 5
       start_period: 20s
 
+  # Outbox delivery, live-call polling, prospecting runs.
   worker:
     build: .
     image: luuri:${LUURI_IMAGE_TAG:-local}
-    command: ["python", "worker.py"]
+    command: ["python", "worker.py", "core"]
     restart: unless-stopped
     hostname: luuri-worker
-    environment:
-      DATABASE_URL: postgresql+psycopg2://luuri:${POSTGRES_PASSWORD}@db:5432/luuri
-      SESSION_SECRET: ${SESSION_SECRET}
-      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
-      ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-claude-sonnet-4-5}
-      BRAVE_SEARCH_API_KEY: ${BRAVE_SEARCH_API_KEY:-}
-      MOVINGFIRM_BACKEND_URL: ${MOVINGFIRM_BACKEND_URL:-}
-      MOVINGFIRM_INTERNAL_TOKEN: ${MOVINGFIRM_INTERNAL_TOKEN:-}
-      TWENTY_API_URL: ${TWENTY_API_URL:-}
-      TWENTY_API_KEY: ${TWENTY_API_KEY:-}
-      WEBHOOK_SIGNING_SECRET: ${WEBHOOK_SIGNING_SECRET:-}
-      ANALYTICS_UX_EVENTS_URL: ${ANALYTICS_UX_EVENTS_URL:-}
-      # Mira (Ilari's agent runtime): a miragen agent container on miragen-net.
-      # Set MIRA_AGENT_URL to that container, e.g. http://luuri-prospector:8080,
-      # and prospecting stops needing an Anthropic key.
-      MIRA_AGENT_URL: ${MIRA_AGENT_URL:-}
-      MIRA_AGENT_TOKEN: ${MIRA_AGENT_TOKEN:-}
-      # Telephony (bridged calls): provider rings the caller's own phone, then
-      # connects the customer. Customer sees TELEPHONY_FROM_NUMBER.
-      TELEPHONY_PROVIDER: ${TELEPHONY_PROVIDER:-}
-      TELEPHONY_FROM_NUMBER: ${TELEPHONY_FROM_NUMBER:-}
-      ELKS_API_USER: ${ELKS_API_USER:-}
-      ELKS_API_PASSWORD: ${ELKS_API_PASSWORD:-}
-      TELEPHONY_RECORD_CALLS: ${TELEPHONY_RECORD_CALLS:-false}
-      # Google Calendar target (kind google_calendar): shared company calendar
-      # written with a service account — same credential shape as
-      # movingfirm-backend. Share the calendar with the service account email.
-      GOOGLE_SERVICE_ACCOUNT_JSON: ${GOOGLE_SERVICE_ACCOUNT_JSON:-}
-      GOOGLE_CALENDAR_ID: ${GOOGLE_CALENDAR_ID:-}
+    environment: *app-env
+    networks:
+      - luuri_internal
+      - miragen-net
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  # Recordings → speech-to-text → call analysis → insight reports. Separate
+  # process: an agent turn or a transcription can take minutes and must not
+  # stall live-call status updates in `worker`.
+  intelligence:
+    build: .
+    image: luuri:${LUURI_IMAGE_TAG:-local}
+    command: ["python", "worker.py", "intelligence"]
+    restart: unless-stopped
+    hostname: luuri-intelligence
+    environment: *app-env
     networks:
       - luuri_internal
       - miragen-net
@@ -134,8 +144,7 @@ networks:
   luuri_internal:
   miragen-net:
     # miragend's network (stack `miragend`), where Mira agent containers live.
-    # Joined read-only in the sense that Luuri only makes HTTP calls to one
-    # agent; nothing here is published on it.
+    # Luuri only makes HTTP calls to agents; nothing here is published on it.
     external: true
 
 volumes:

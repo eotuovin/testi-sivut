@@ -17,13 +17,13 @@ async function load() {
 onMounted(load)
 
 function startNew() {
-  editing.value = { name: '', product: '', script: '', max_attempts: 4, retry_after_minutes: 240 }
+  editing.value = { name: '', product: '', script: '', recording_notice: 'Tämä puhelu tallennetaan palvelun kehittämistä varten.', max_attempts: 4, retry_after_minutes: 240 }
 }
 async function save() {
   if (!editing.value) return
   error.value = ''
   try {
-    const body = { name: editing.value.name, product: editing.value.product, script: editing.value.script, max_attempts: editing.value.max_attempts, retry_after_minutes: editing.value.retry_after_minutes }
+    const body = { name: editing.value.name, product: editing.value.product, script: editing.value.script, recording_notice: editing.value.recording_notice, max_attempts: editing.value.max_attempts, retry_after_minutes: editing.value.retry_after_minutes }
     if (editing.value.id) await apiPatch(`/campaigns/${editing.value.id}`, body)
     else await apiPost('/campaigns', body)
     editing.value = null
@@ -52,6 +52,7 @@ async function setStatus(c: Campaign, status: string) {
       <div class="field"><label>Max soittoyrityksiä per yritys</label><input v-model.number="editing.max_attempts" type="number" min="1" max="20" /></div>
       <div class="field"><label>Uusi yritys kun ei vastaa (min)</label><input v-model.number="editing.retry_after_minutes" type="number" min="5" /></div>
     </div>
+    <div class="field"><label>Tallennusilmoitus (soittaja sanoo alussa, kun puhelut nauhoitetaan)</label><input v-model="editing.recording_notice" /></div>
     <div class="field"><label>Spiikki (näytetään soittajalle)</label><textarea v-model="editing.script" style="min-height: 200px" placeholder="Moi, täällä … Soitan siitä syystä että …" /></div>
     <div class="row"><button class="primary" :disabled="!editing.name || !editing.product" @click="save">Tallenna</button><button @click="editing = null">Peru</button></div>
   </div>

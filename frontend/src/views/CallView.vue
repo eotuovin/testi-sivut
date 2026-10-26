@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useCallsStore } from '../stores/calls'
-import { errorText } from '../api/client'
+import { apiGet, errorText } from '../api/client'
 import type { CallLog, Contact } from '../api/types'
 import { OUTCOME_LABELS } from '../api/types'
 import OutcomeForm from '../components/OutcomeForm.vue'
@@ -11,6 +11,7 @@ import { fmtDateTime } from '../format'
 
 const store = useCallsStore()
 const tel = useTelephonyStore()
+const intel = ref<{ recording_enabled: boolean } | null>(null)
 const error = ref('')
 const busy = ref(false)
 const selectedContactId = ref<string | null>(null)
@@ -21,6 +22,7 @@ onMounted(async () => {
   tick = window.setInterval(() => (now.value = Date.now()), 1000)
   try {
     await Promise.all([store.loadCampaigns(), store.loadCallbacks(), tel.load()])
+    intel.value = await apiGet<{ recording_enabled: boolean }>('/intelligence/status')
   } catch (e) {
     error.value = errorText(e)
   }
@@ -121,6 +123,9 @@ async function release() {
         </div>
       </div>
 
+      <div v-if="store.task.recording_notice && intel?.recording_enabled" class="card small" style="border-color: var(--warn)">
+        <strong>Kerro heti alussa:</strong> {{ store.task.recording_notice }}
+      </div>
       <div v-if="store.task.script" class="card">
         <h2>Spiikki · {{ store.task.product }}</h2>
         <div class="script">{{ store.task.script }}</div>
@@ -140,7 +145,7 @@ async function release() {
     </div>
 
     <div class="card">
-      <OutcomeForm :key="store.task.id" :task-id="store.task.id" :initial-notes="store.task.notes_draft ?? ''" :contacts="store.task.contacts" :contact-id="contact?.id ?? null" :phone="contact?.phone_e164 ?? null" :busy="busy" @submit="submit" />
+      <OutcomeForm :key="store.task.id" :task-id="store.task.id" :initial-notes="store.task.notes_draft ?? ''" :contacts="store.task.contacts" :contact-id="contact?.id ?? null" :phone="contact?.phone_e164 ?? null" :busy="busy" :recording="!!intel?.recording_enabled && !!tel.session" @submit="submit" />
     </div>
   </div>
 

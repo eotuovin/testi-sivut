@@ -139,17 +139,64 @@ Tarvittavat tunnukset (Ilari asettaa stackiin): `ELKS_API_USER`,
 suomalainen numero, ~3 €/kk; puhelut ~0,02–0,05 €/min per leg, kaksi legiä).
 Uusi operaattori = `Provider`-aliluokka `app/services/telephony/`.
 
-## Tekoäly: Mira ennen Anthropicia
+## Tekoäly ja puheluäly (Mira)
 
-`app/services/llm.py` valitsee: `MIRA_AGENT_URL` asetettu → **Mira**
-(Ilarin agenttiajo, miragen-runner: `POST /run/async`, `GET /runs/{id}`,
-otsikko `X-Miragen-Token`), muuten `ANTHROPIC_API_KEY` → Claude suoraan,
-muuten sääntöpohjainen poiminta. Prospektiin tallentuu `enriched_by`.
+### Miten Luuri käyttää Miraa
 
-Mira-agentin vaatimukset: tekstipohjainen profiili ilman hyväksyntää
-vaativia työkaluja, ohjeistettu vastaamaan pelkällä JSONilla (prompt pyytää
-sitä ja parseri poimii ensimmäisen `{…}`-lohkon). Worker on liitetty
-`miragen-net`-verkkoon, joten agenttiin viitataan konttinimellä.
+```
+Luuri ──(Bearer, session client)──▶ mirarun hub  /api/agent-sessions   (ADR-035)
+                                        │  reitittää vuoron agentille
+                                        ▼
+                         miragen-agentit: luuri-prospector · sales-call-analyst · sales-funnel-analyst
+                         (nyt miragend/VPS, myöhemmin k8s-spokeilla – Luuri ei näe eroa)
+```
+
+`app/services/llm.py` valitsee taustan: **mirarun** (`MIRARUN_URL` +
+`MIRARUN_SESSION_TOKEN`) → suora miragen-kontti (`MIRA_AGENT_URL`, legacy) →
+Anthropic suoraan → ei tekoälyä (sääntöpohjainen). Jokainen kutsu nimeää
+tehtävän (`prospect`, `call_analysis`, `funnel_insights`), joka valitsee hubin
+agentin. Yksi kehote = yksi sessio, idempotenssiavaimella; sessio suljetaan
+heti vastauksen jälkeen. Hub ei tue vielä output-skeemaa eikä webhookeja, joten
+JSON-sopimus on profiilin ohjeissa ja Luuri pollaa.
+
+Profiilit: `Muutto365/movingfirm-agents` `agents/{luuri-prospector,sales-call-analyst,sales-funnel-analyst}`.
+Kutsusopimus on kahdessa paikassa – profiilin ohjeissa ja
+`app/services/intelligence/contract.py` (kategoriat aggregoidaan SQL:ssä, joten
+nimeä ei saa vaihtaa vain toisessa).
+
+### Puhelusta dataksi
+
+1. **Nauhoite** – 46elks (`TELEPHONY_RECORD_CALLS=true`; haetaan
+   `GET /a1/recordings` puhelun id:llä, ei webhookia) tai soittaja lataa
+   tiedoston (puhelimen oma nauhuri). **Käsitellään vain, jos soittaja
+   vahvistaa kertoneensa tallennuksesta** (kampanjan `recording_notice`
+   näytetään soittajalle). Muuten nauhoitetta ei haeta eikä tallenneta.
+2. **Litterointi** – mikä tahansa OpenAI-yhteensopiva
+   `/audio/transcriptions`-endpoint (`STT_BASE_URL`): oma faster-whisper
+   (speaches) omalla raudalla tai toimittaja DPA:n jälkeen. Kieli `fi`.
+   **Ääni poistetaan heti litteroinnin jälkeen.** Teksti poistetaan
+   `TRANSCRIPT_RETENTION_DAYS` (180) päivän jälkeen; analyysi säilyy.
+3. **Analyysi** – `sales-call-analyst` palauttaa JSONin: tunnelma,
+   kiinnostus 0–5, päättäjä tavoitettu, mihin asti puhelu eteni,
+   vastaväitteet (kiinteä taksonomia: hinta, ei tarvetta, ajoitus, on jo
+   ratkaisu, ei päätösvaltaa, laita sähköpostia, luottamus, sopimus, ei aikaa,
+   huono kokemus), estot, ostosignaalit, kitkakohdat, seuraava askel,
+   valmennusvinkki. Puhelin- ja sähköpostinumerot karsitaan vielä Luurissa
+   ennen tallennusta. **Ilman nauhoitetta analysoidaan soittajan
+   muistiinpanot** (≥ 40 merkkiä) – toimii heti.
+4. **Oivallukset** – SQL-aggregaatit (vastaväitteet: kuinka usein, kuinka
+   usein käsitelty, kuinka usein bookattiin silti; estot; tunnelma; mihin
+   puhelut pysähtyvät; kitka) + `sales-funnel-analyst` kirjoittaa niistä
+   havainnot, suositukset ja valmiit repliikit spiikkiin. Agentti näkee vain
+   luvut ja anonymisoidut esimerkit, ei litterointeja.
+
+Analytiikka: `call.analyzed` ja `insight.report_created` menevät outboxin
+kautta myös ux_events-trackeriin (`objection_categories`, `sentiment`,
+`interest_level`, `stage_reached` – ei tekstiä).
+
+Workerit: `worker core` (outbox, puhelut, prospektointi) ja `worker
+intelligence` (nauhoite → litterointi → analyysi → raportit) ovat eri
+prosessit, jotta minuutin agenttivuoro ei pysäytä puhelun tilapäivityksiä.
 
 ## Muistiinpanot puhelun aikana ja kalenteri
 
@@ -194,6 +241,7 @@ on silti pakollinen ja estää numeron kaikissa yrityksissä.
 `prospects`, `outbox_events`, `integration_targets`, `integration_deliveries`.
 002: `users.phone_e164`, `call_sessions` (puhelinpalvelun legit), `prospects.enriched_by`.
 003: `call_drafts`, `sales_bookings.{duration_minutes,location,meeting_url,attendee_email,calendar_event_id,calendar_html_link}`, kohdetyyppi `google_calendar`.
+004: `call_recordings`, `call_transcripts`, `call_analyses`, `insight_reports`, suostumus- ja tallennusilmoituskentät.
 
 ## Seuraavat askeleet
 

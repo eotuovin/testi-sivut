@@ -4,7 +4,8 @@ business change so an event can never exist without its cause, or vice versa.
 Event catalogue (keep in sync with README "Events"):
   company.created, company.updated, contact.created,
   call.logged, booking.created, booking.updated,
-  prospecting.run_finished, prospect.approved
+  prospecting.run_finished, prospect.approved,
+  call.analyzed, insight.report_created
 """
 from __future__ import annotations
 
@@ -25,6 +26,8 @@ EVENT_TYPES = frozenset(
         "booking.updated",
         "prospecting.run_finished",
         "prospect.approved",
+        "call.analyzed",
+        "insight.report_created",
     }
 )
 

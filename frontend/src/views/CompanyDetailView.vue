@@ -5,11 +5,13 @@ import { apiGet, apiPatch, apiPost, errorText } from '../api/client'
 import type { CompanyDetail } from '../api/types'
 import { OUTCOME_LABELS } from '../api/types'
 import { fmtDateTime, fmtEur } from '../format'
+import CallAnalysisPanel from '../components/CallAnalysisPanel.vue'
 
 const route = useRoute()
 const company = ref<CompanyDetail | null>(null)
 const error = ref('')
 const notes = ref('')
+const openCall = ref<string | null>(null)
 const nc = ref({ name: '', title: '', phone: '', email: '' })
 
 async function load() {
@@ -104,7 +106,10 @@ async function addContact() {
           <td>{{ OUTCOME_LABELS[c.outcome as keyof typeof OUTCOME_LABELS] ?? c.outcome }}<span v-if="c.callback_at" class="muted"> → {{ fmtDateTime(c.callback_at) }}</span></td>
           <td>{{ c.user_name }}</td>
           <td>{{ c.contact_name || c.phone_dialed || '' }}</td>
-          <td class="muted">{{ c.notes }}</td>
+          <td class="muted">{{ c.notes }}
+            <div style="margin-top: 0.3rem"><a href="#" @click.prevent="openCall = openCall === c.id ? null : c.id">{{ openCall === c.id ? 'Sulje analyysi' : 'Analyysi ja nauhoite' }}</a></div>
+            <CallAnalysisPanel v-if="openCall === c.id" :call-id="c.id" :has-notes="!!c.notes" />
+          </td>
         </tr>
       </table>
     </div>
