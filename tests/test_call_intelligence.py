@@ -280,74 +280,20 @@ def test_status_endpoint(sales_client):
     assert "analyses_pending" in s and s["stt"]["language"] == "fi"
 
 
-def test_local_faster_whisper_backend(monkeypatch, admin_client, sales_client):
-    """The default backend, with WhisperModel faked: right arguments, segments
-    joined, model loaded once, audio dropped afterwards. The real model is
-    exercised by test_real_faster_whisper (opt-in, downloads ~75 MB)."""
-    import faster_whisper
+
+def test_no_in_process_stt(monkeypatch):
+    """ADR-0008: Luuri never loads a speech model. Without a remote STT
+    service configured, nothing transcribes; faster-whisper is not a dependency."""
+    import importlib.util
 
     from app.services.intelligence import stt
 
-    loads, calls = [], []
-
-    class Seg:
-        def __init__(self, s, e, t):
-            self.start, self.end, self.text = s, e, t
-
-    class Info:
-        language, duration = "fi", 42.0
-
-    class FakeModel:
-        def __init__(self, name, **kw):
-            loads.append((name, kw))
-
-        def transcribe(self, path, **kw):
-            calls.append(kw)
-            assert open(path, "rb").read().startswith(b"RIFF")
-            return iter([Seg(0.0, 2.0, " Hei. "), Seg(2.0, 5.5, "Liian kallis meille.")]), Info()
-
-    monkeypatch.setattr(faster_whisper, "WhisperModel", FakeModel)
-    monkeypatch.setattr(stt, "_model", None)
-    monkeypatch.setattr(settings, "STT_PROVIDER", "faster-whisper")
-    _clear_queues()
-    assert stt.provider() == "faster-whisper" and stt.configured()
-
-    campaign = _make_campaign(admin_client)
-    company, _ = _make_company(admin_client)
-    admin_client.post(f"/api/campaigns/{campaign['id']}/enqueue", json={"company_ids": [company["id"]]})
-    task = sales_client.post("/api/calls/next", params={"campaign_id": campaign["id"]}).json()
-    call = sales_client.post("/api/calls", json={"task_id": task["id"], "outcome": "not_interested"}).json()["call"]
-    for _ in range(2):
-        r = sales_client.post(f"/api/calls/{call['id']}/recording", files={"file": ("c.wav", b"RIFF" + b"\0" * 512, "audio/wav")}, data={"consent": "true"})
-        assert r.status_code == 201
-    while pipeline.transcribe_one():
-        pass
-    assert len(loads) == 1  # loaded once per process
-    name, kw = loads[0]
-    assert name == settings.STT_MODEL and kw["device"] == "cpu" and kw["compute_type"] == "int8" and kw["download_root"] == settings.STT_MODEL_DIR
-    assert calls[0]["language"] == "fi" and calls[0]["vad_filter"] is True
-    a = sales_client.get(f"/api/calls/{call['id']}/analysis").json()
-    assert a["transcript"]["text"] == "Hei. Liian kallis meille." and a["transcript"]["model"].startswith("faster-whisper:")
-    assert all(r["status"] == "transcribed" for r in a["recordings"])
-    with db_conn() as conn:
-        assert conn.execute(text("SELECT count(*) FROM call_recordings WHERE call_id=:c AND audio IS NOT NULL"), {"c": call["id"]}).scalar() == 0
-        assert conn.execute(text("SELECT provider FROM call_transcripts WHERE call_id=:c LIMIT 1"), {"c": call["id"]}).scalar() == "faster-whisper"
-
-
-def test_real_faster_whisper(monkeypatch, tmp_path):
-    """Opt-in: LUURI_STT_REAL_AUDIO=/path/to/finnish.wav runs the real tiny model."""
-    import os
-
-    import pytest
-
-    path = os.environ.get("LUURI_STT_REAL_AUDIO")
-    if not path:
-        pytest.skip("set LUURI_STT_REAL_AUDIO to run the real model")
-    from app.services.intelligence import stt
-
-    monkeypatch.setattr(stt, "_model", None)
-    monkeypatch.setattr(settings, "STT_PROVIDER", "faster-whisper")
-    monkeypatch.setattr(settings, "STT_MODEL", os.environ.get("LUURI_STT_REAL_MODEL", "Systran/faster-whisper-tiny"))
-    monkeypatch.setattr(settings, "STT_MODEL_DIR", os.environ.get("LUURI_STT_MODEL_DIR", str(tmp_path)))
-    t = stt.transcribe(open(path, "rb").read(), "audio/wav")
-    assert t.language == "fi" and "tammikuussa" in t.text.lower()
+    monkeypatch.setattr(settings, "STT_PROVIDER", "remote")
+    monkeypatch.setattr(settings, "STT_BASE_URL", None)
+    assert stt.provider() is None and not stt.configured()
+    monkeypatch.setattr(settings, "STT_PROVIDER", "faster-whisper")  # the removed in-process value
+    monkeypatch.setattr(settings, "STT_BASE_URL", "http://stt:8000/v1")
+    assert stt.provider() is None
+    req = open("requirements.txt").read()
+    assert "faster-whisper" not in req and "ctranslate2" not in req
+    assert not hasattr(stt, "_local_model")

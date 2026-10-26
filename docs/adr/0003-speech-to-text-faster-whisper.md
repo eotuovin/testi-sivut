@@ -1,6 +1,6 @@
 # ADR-0003: Speech-to-text with faster-whisper on our own CPU — no paid STT APIs
 
-- Status: Accepted (2026-10-26)
+- Status: **Partly superseded by [ADR-0008](0008-no-heavy-compute-on-production-nodes.md)** (2026-10-26). Still valid: faster-whisper, large-v3-turbo-class model, Finnish, no paid STT APIs. **No longer valid: running it inside Luuri's containers** — that caused a production OOM.
 - Deciders: Ilari
 
 ## Context

@@ -173,13 +173,13 @@ nimeä ei saa vaihtaa vain toisessa).
    tiedoston (puhelimen oma nauhuri). **Käsitellään vain, jos soittaja
    vahvistaa kertoneensa tallennuksesta** (kampanjan `recording_notice`
    näytetään soittajalle). Muuten nauhoitetta ei haeta eikä tallenneta.
-2. **Litterointi** – **faster-whisper omalla CPU:lla** `intelligence`-workerissa
-   (`deepdml/faster-whisper-large-v3-turbo-ct2`, int8, kieli `fi`). Ei
-   maksullisia STT-rajapintoja, ääni ei lähde koneelta (ADR-0003). Malli
-   (~1,6 Gt) ladataan kerran `luuri_models`-volyymiin; kontti on rajattu
-   2 CPU / 3 Gt. Mitattu: ~1,5× reaaliaika kahdella ytimellä, ~2,1 Gt RAM.
-   **Ääni poistetaan heti litteroinnin jälkeen.** Teksti poistetaan
-   `TRANSCRIPT_RETENTION_DAYS` (180) päivän jälkeen; analyysi säilyy.
+2. **Litterointi** – **ei Luurin konteissa** (ADR-0008). Raskas laskenta
+   ajetaan Kubernetes-klusterilla; Luuri lähettää äänen klusterin
+   STT-palvelulle (`STT_PROVIDER=remote`, `STT_BASE_URL`, faster-whisper,
+   ei maksullisia rajapintoja). Kunnes palvelu on olemassa,
+   `STT_PROVIDER=none`: nauhoitteet odottavat ja analyysi tehdään soittajan
+   muistiinpanoista. **Ääni poistetaan heti litteroinnin jälkeen.** Teksti
+   poistetaan `TRANSCRIPT_RETENTION_DAYS` (180) päivän jälkeen; analyysi säilyy.
 3. **Analyysi** – `sales-call-analyst` palauttaa JSONin: tunnelma,
    kiinnostus 0–5, päättäjä tavoitettu, mihin asti puhelu eteni,
    vastaväitteet (kiinteä taksonomia: hinta, ei tarvetta, ajoitus, on jo

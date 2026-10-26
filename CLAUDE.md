@@ -29,9 +29,12 @@ build a statement from an f-string or accept a SQL fragment as an argument.
   together: `app/services/intelligence/contract.py` and
   `Muutto365/movingfirm-agents/agents/sales-call-analyst/agent.yaml`.
   Categories are aggregated in SQL — add, don't rename.
-- Speech-to-text is faster-whisper on our own CPU (ADR-0003). Do not add a
-  paid STT API. `av` is pinned `<16` for a real incompatibility; read the ADR
-  before bumping it.
+- **No heavy compute in this repo's containers** (ADR-0008). Speech-to-text,
+  extraction, models of any kind run on the Kubernetes cluster and Luuri calls
+  them over HTTP. Never add ML libraries or model downloads to the image: a
+  runtime resource limit does not protect the production node from a
+  host-side build — that is exactly how the 2026-10-26 OOM happened. No paid
+  STT APIs either (ADR-0003).
 - Personal data (ADR-0004): no audio without `recording_consent`; audio is
   dropped after transcription; never put contact details in an analysis,
   an analytics event, or a prompt to the funnel agent.
@@ -41,13 +44,15 @@ build a statement from an f-string or accept a SQL fragment as an argument.
 `pytest` runs against a real Postgres (`DATABASE_URL`); tests share a
 persistent database, so anything unique needs a per-run value (`unique()` in
 `tests/conftest.py`). External services are faked with local HTTP servers.
-`STT_PROVIDER=none` by default in tests; `LUURI_STT_REAL_AUDIO=<wav>` opts into
-a real faster-whisper run. Confirm a new test fails against the unfixed code.
+`STT_PROVIDER=none` by default; STT is faked with a local HTTP server.
+Confirm a new test fails against the unfixed code.
 
 ## Deploy
 
 Git-backed Portainer stack `luuri` on the main VPS, VPN-only
 (`10.8.0.4:6770`). Every env var the app reads is declared once in
 `x-app-env` in `docker-compose.yml`; a variable set in Portainer but not
-declared there never reaches a container. The `intelligence` service is
-CPU/RAM-capped because it shares the VPS with production.
+declared there never reaches a container. Every service has a small
+CPU/RAM limit because the stack shares the production VPS; the image is built
+on that host, so keep dependencies light. Do not redeploy through miradeploy
+without Ilari's go-ahead; cluster workloads go through Flux in the infra repo.

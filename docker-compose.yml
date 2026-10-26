@@ -33,16 +33,14 @@ x-app-env: &app-env
   ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
   ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-claude-sonnet-4-5}
   BRAVE_SEARCH_API_KEY: ${BRAVE_SEARCH_API_KEY:-}
-  # Speech-to-text: faster-whisper in-process in `intelligence`, our own CPU
-  # (docs/adr/0003). openai-compatible only for a future self-hosted server.
-  STT_PROVIDER: ${STT_PROVIDER:-faster-whisper}
-  STT_MODEL: ${STT_MODEL:-deepdml/faster-whisper-large-v3-turbo-ct2}
-  STT_COMPUTE_TYPE: ${STT_COMPUTE_TYPE:-int8}
-  STT_CPU_THREADS: ${STT_CPU_THREADS:-2}
-  STT_LANGUAGE: ${STT_LANGUAGE:-fi}
-  STT_MODEL_DIR: /models
+  # Speech-to-text is NOT done here (docs/adr/0008). STT_PROVIDER=remote points
+  # at an STT service on the Kubernetes cluster once one exists; until then
+  # recordings wait and the callers' notes are analysed instead.
+  STT_PROVIDER: ${STT_PROVIDER:-none}
   STT_BASE_URL: ${STT_BASE_URL:-}
   STT_API_KEY: ${STT_API_KEY:-}
+  STT_MODEL: ${STT_MODEL:-large-v3-turbo}
+  STT_LANGUAGE: ${STT_LANGUAGE:-fi}
   ANALYZE_NOTES: ${ANALYZE_NOTES:-true}
   TRANSCRIPT_RETENTION_DAYS: ${TRANSCRIPT_RETENTION_DAYS:-180}
   # Integrations
@@ -101,6 +99,11 @@ services:
     ports:
       - "${LUURI_BIND:-10.8.0.4:6770}:8000"
     environment: *app-env
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 512m
     networks:
       - luuri_internal
     depends_on:
@@ -121,6 +124,11 @@ services:
     restart: unless-stopped
     hostname: luuri-worker
     environment: *app-env
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 384m
     networks:
       - luuri_internal
       - miragen-net
@@ -128,9 +136,10 @@ services:
       migrate:
         condition: service_completed_successfully
 
-  # Recordings → speech-to-text → call analysis → insight reports. Separate
-  # process: an agent turn or a transcription can take minutes and must not
-  # stall live-call status updates in `worker`.
+  # Recordings → (remote) speech-to-text → call analysis → insight reports.
+  # Only HTTP calls and polling; no model runs here (docs/adr/0008). Separate
+  # from `worker` so a slow agent turn never stalls live-call status. Capped
+  # small: it shares the production VPS.
   intelligence:
     build: .
     image: luuri:${LUURI_IMAGE_TAG:-local}
@@ -138,17 +147,11 @@ services:
     restart: unless-stopped
     hostname: luuri-intelligence
     environment: *app-env
-    volumes:
-      # faster-whisper model cache (~1.6 GB for large-v3-turbo), downloaded once.
-      - luuri_models:/models
-    # Shares the VPS with the production stacks: large-v3-turbo int8 peaks at
-    # ~2.1 GB RSS (measured 2026-10-26). Capped so a long transcription can
-    # never starve backend/admin; it just runs slower.
     deploy:
       resources:
         limits:
-          cpus: "2"
-          memory: 3g
+          cpus: "0.5"
+          memory: 384m
     networks:
       - luuri_internal
       - miragen-net
@@ -165,4 +168,3 @@ networks:
 
 volumes:
   luuri_db:
-  luuri_models:
