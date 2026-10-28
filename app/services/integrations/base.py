@@ -183,6 +183,13 @@ class AnalyticsAdapter(Adapter):
             "stage_reached": p.get("stage_reached"),
             "objection_categories": p.get("objection_categories"),
             "blocker_categories": p.get("blocker_categories"),
+            # lists and saved searches (search desk): what sellers build, never who is on it
+            "list_id": str(p.get("list_id")) if p.get("list_id") else None,
+            "list_kind": p.get("kind") if event["aggregate_type"] in ("list", "saved_search") else None,
+            "members_added": p.get("added"),
+            "members_from_register": p.get("from_register"),
+            "search_scope": p.get("scope"),
+            "search_filters": p.get("filters"),
         }
         body = {
             "session_id": f"luuri-{p.get('company_id') or event['aggregate_id']}",

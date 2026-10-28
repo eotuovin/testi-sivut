@@ -40,11 +40,56 @@ class CompanyPatch(BaseModel):
     status: str | None = None
     notes: str | None = Field(default=None, max_length=4000)
     external_refs: dict | None = None
+    # profile (ZoomInfo-style company page)
+    industry_label: str | None = Field(default=None, max_length=200)
+    company_form: str | None = Field(default=None, max_length=60)
+    street_address: str | None = Field(default=None, max_length=200)
+    postal_code: str | None = Field(default=None, max_length=10)
+    employees: int | None = Field(default=None, ge=0)
+    revenue_eur: float | None = Field(default=None, ge=0)
+    founded_year: int | None = Field(default=None, ge=1500, le=2100)
+    description: str | None = Field(default=None, max_length=4000)
+    phone: str | None = Field(default=None, max_length=50)
+    email: str | None = Field(default=None, max_length=200)
+    linkedin_url: str | None = Field(default=None, max_length=300)
+    logo_url: str | None = Field(default=None, max_length=300)
+    technologies: list[str] | None = None
+    owner_id: UUID | None = None
+    clear_owner: bool = False
+
+
+class RegisterCompanyIn(BaseModel):
+    """A register hit as the search endpoint returned it; saved into Luuri on demand."""
+    business_id: str = Field(min_length=9, max_length=12)
+    name: str = Field(min_length=1, max_length=200)
+    company_form: str | None = None
+    industry_code: str | None = None
+    industry_label: str | None = None
+    website: str | None = None
+    city: str | None = None
+    postal_code: str | None = None
+    street_address: str | None = None
+    registration_date: str | None = Field(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$")
+
+
+class ContactPatch(BaseModel):
+    name: str | None = Field(default=None, max_length=200)
+    title: str | None = Field(default=None, max_length=200)
+    department: str | None = Field(default=None, max_length=100)
+    management_level: str | None = Field(default=None, pattern="^(owner|c_level|vp|director|manager|staff)$")
+    phone: str | None = Field(default=None, max_length=50)
+    email: str | None = Field(default=None, max_length=200)
+    linkedin_url: str | None = Field(default=None, max_length=300)
+    is_primary: bool | None = None
+    verified: bool | None = None
 
 
 class ContactIn(BaseModel):
     name: str | None = Field(default=None, max_length=200)
     title: str | None = Field(default=None, max_length=200)
+    department: str | None = Field(default=None, max_length=100)
+    management_level: str | None = Field(default=None, pattern="^(owner|c_level|vp|director|manager|staff)$")
+    linkedin_url: str | None = Field(default=None, max_length=300)
     phone: str | None = Field(default=None, max_length=50)
     email: str | None = Field(default=None, max_length=200)
     is_primary: bool = False
@@ -91,18 +136,51 @@ def insert_contact(conn, company_id: UUID, body: ContactIn, confidence: float | 
     row = conn.execute(
         text(
             """
-            INSERT INTO contacts (company_id, name, title, phone, phone_e164, email, is_primary, source, confidence, do_not_call)
-            VALUES (:cid, :name, :title, :phone, :pe, :email, :prim, :src, :conf, :dnc)
-            RETURNING id, company_id, name, title, phone, phone_e164, email, is_primary, source, confidence, do_not_call, created_at
+            INSERT INTO contacts (company_id, name, title, department, management_level, linkedin_url, phone, phone_e164, email, is_primary, source, confidence, do_not_call)
+            VALUES (:cid, :name, :title, :dept, :level, :li, :phone, :pe, :email, :prim, :src, :conf, :dnc)
+            RETURNING id, company_id, name, title, department, management_level, linkedin_url, phone, phone_e164, email, is_primary, source, confidence, do_not_call, created_at
             """
         ),
         {
-            "cid": company_id, "name": body.name, "title": body.title, "phone": body.phone, "pe": phone_e164,
+            "cid": company_id, "name": body.name, "title": body.title, "dept": body.department, "level": body.management_level,
+            "li": body.linkedin_url, "phone": body.phone, "pe": phone_e164,
             "email": body.email, "prim": body.is_primary, "src": body.source, "conf": confidence, "dnc": dnc,
         },
     ).mappings().one()
     emit(conn, "contact.created", "contact", row["id"], dict(row))
     return dict(row)
+
+
+def upsert_from_register(conn, reg: RegisterCompanyIn) -> dict:
+    """A register hit becomes a company once; a second save returns the existing row."""
+    existing = conn.execute(text("SELECT id FROM companies WHERE business_id=:b"), {"b": reg.business_id}).mappings().first()
+    if existing:
+        return {"id": existing["id"], "created": False}
+    company = insert_company(
+        conn,
+        CompanyIn(
+            name=reg.name, business_id=reg.business_id, website=reg.website, industry_code=reg.industry_code,
+            industry_label=reg.industry_label, company_form=reg.company_form, city=reg.city, postal_code=reg.postal_code,
+            street_address=reg.street_address, source="prh",
+        ),
+    )
+    if reg.registration_date:
+        conn.execute(text("UPDATE companies SET registration_date=CAST(:d AS date) WHERE id=:id"), {"d": reg.registration_date, "id": company["id"]})
+    return {"id": company["id"], "created": True}
+
+
+class FromRegisterIn(BaseModel):
+    companies: list[RegisterCompanyIn] = Field(min_length=1, max_length=500)
+
+
+@router.post("/companies/from-register")
+def companies_from_register(body: FromRegisterIn, _: Principal = Depends(require_user)):
+    """Save register search hits into Luuri so they can be queued, listed and annotated."""
+    out = []
+    with db_conn() as conn:
+        for reg in body.companies:
+            out.append({"business_id": reg.business_id, **upsert_from_register(conn, reg)})
+    return {"companies": out, "created": sum(1 for o in out if o["created"])}
 
 
 @router.get("/companies")
@@ -146,7 +224,17 @@ def create_company(body: CompanyIn, _: Principal = Depends(require_user)):
 @router.get("/companies/{company_id}")
 def get_company(company_id: UUID, _: Principal = Depends(require_read)):
     with db_conn() as conn:
-        company = conn.execute(text("SELECT id, business_id, name, website, domain, industry_code, industry_label, company_form, city, postal_code, street_address, registration_date, status, source, external_refs, notes, created_at, updated_at FROM companies WHERE id=:id"), {"id": company_id}).mappings().first()
+        company = conn.execute(
+            text(
+                """
+                SELECT co.id, co.business_id, co.name, co.website, co.domain, co.industry_code, co.industry_label, co.company_form, co.city, co.postal_code,
+                       co.street_address, co.registration_date, co.status, co.source, co.external_refs, co.notes, co.employees, co.revenue_eur, co.founded_year,
+                       co.description, co.phone, co.email, co.linkedin_url, co.logo_url, co.technologies, co.owner_id, u.name AS owner_name, co.created_at, co.updated_at
+                FROM companies co LEFT JOIN users u ON u.id = co.owner_id WHERE co.id=:id
+                """
+            ),
+            {"id": company_id},
+        ).mappings().first()
         if company is None:
             raise HTTPException(status_code=404, detail="company not found")
         contacts = conn.execute(
@@ -172,12 +260,17 @@ def get_company(company_id: UUID, _: Principal = Depends(require_read)):
             ),
             {"id": company_id},
         ).mappings().all()
+        lists = conn.execute(
+            text("SELECT DISTINCT l.id, l.name, l.kind FROM list_members m JOIN lists l ON l.id = m.list_id WHERE m.company_id=:id ORDER BY l.name"),
+            {"id": company_id},
+        ).mappings().all()
     return {
         **dict(company),
         "contacts": [dict(c) for c in contacts],
         "calls": [dict(c) for c in calls],
         "bookings": [dict(b) for b in bookings],
         "tasks": [dict(t) for t in tasks],
+        "lists": [dict(li) for li in lists],
     }
 
 
@@ -196,14 +289,33 @@ def patch_company(company_id: UUID, body: CompanyPatch, _: Principal = Depends(r
                     city = COALESCE(:city, city),
                     status = COALESCE(:status, status),
                     notes = COALESCE(:notes, notes),
-                    external_refs = external_refs || CAST(:refs AS jsonb)
+                    external_refs = external_refs || CAST(:refs AS jsonb),
+                    industry_label = COALESCE(:il, industry_label),
+                    company_form = COALESCE(:cf, company_form),
+                    street_address = COALESCE(:addr, street_address),
+                    postal_code = COALESCE(:pc, postal_code),
+                    employees = COALESCE(:emp, employees),
+                    revenue_eur = COALESCE(:rev, revenue_eur),
+                    founded_year = COALESCE(:fy, founded_year),
+                    description = COALESCE(:descr, description),
+                    phone = COALESCE(:phone, phone),
+                    email = COALESCE(:email, email),
+                    linkedin_url = COALESCE(:li, linkedin_url),
+                    logo_url = COALESCE(:logo, logo_url),
+                    technologies = COALESCE(CAST(:tech AS text[]), technologies),
+                    owner_id = CASE WHEN :clear_owner THEN NULL ELSE COALESCE(:owner, owner_id) END
                 WHERE id = :id
-                RETURNING id, business_id, name, website, domain, industry_code, industry_label, company_form, city, postal_code, street_address, registration_date, status, source, external_refs, notes, created_at, updated_at
+                RETURNING id, business_id, name, website, domain, industry_code, industry_label, company_form, city, postal_code, street_address, registration_date, status, source, external_refs, notes,
+                          employees, revenue_eur, founded_year, description, phone, email, linkedin_url, logo_url, technologies, owner_id, created_at, updated_at
                 """
             ),
             {
                 "name": body.name, "web": body.website, "dom": _domain(body.website), "city": body.city,
                 "status": body.status, "notes": body.notes, "refs": json.dumps(body.external_refs or {}), "id": company_id,
+                "il": body.industry_label, "cf": body.company_form, "addr": body.street_address, "pc": body.postal_code,
+                "emp": body.employees, "rev": body.revenue_eur, "fy": body.founded_year, "descr": body.description,
+                "phone": body.phone, "email": body.email, "li": body.linkedin_url, "logo": body.logo_url,
+                "tech": body.technologies, "owner": body.owner_id, "clear_owner": body.clear_owner,
             },
         ).mappings().first()
         if row is None:
@@ -218,6 +330,42 @@ def add_contact(company_id: UUID, body: ContactIn, _: Principal = Depends(requir
         if conn.execute(text("SELECT 1 FROM companies WHERE id=:id"), {"id": company_id}).first() is None:
             raise HTTPException(status_code=404, detail="company not found")
         return insert_contact(conn, company_id, body)
+
+
+@router.patch("/contacts/{contact_id}")
+def patch_contact(contact_id: UUID, body: ContactPatch, _: Principal = Depends(require_user)):
+    phone_e164 = canonical_phone(body.phone) if body.phone else None
+    with db_conn() as conn:
+        if body.is_primary:
+            conn.execute(text("UPDATE contacts SET is_primary = false WHERE company_id = (SELECT company_id FROM contacts WHERE id=:id)"), {"id": contact_id})
+        row = conn.execute(
+            text(
+                """
+                UPDATE contacts SET
+                    name = COALESCE(:name, name), title = COALESCE(:title, title), department = COALESCE(:dept, department),
+                    management_level = COALESCE(:level, management_level), phone = COALESCE(:phone, phone),
+                    phone_e164 = COALESCE(:pe, phone_e164), email = COALESCE(:email, email), linkedin_url = COALESCE(:li, linkedin_url),
+                    is_primary = COALESCE(:prim, is_primary),
+                    verified_at = CASE WHEN :verified THEN now() ELSE verified_at END
+                WHERE id = :id RETURNING *
+                """
+            ),
+            {
+                "name": body.name, "title": body.title, "dept": body.department, "level": body.management_level, "phone": body.phone,
+                "pe": phone_e164, "email": body.email, "li": body.linkedin_url, "prim": body.is_primary,
+                "verified": bool(body.verified), "id": contact_id,
+            },
+        ).mappings().first()
+        if row is None:
+            raise HTTPException(status_code=404, detail="contact not found")
+    return dict(row)
+
+
+@router.delete("/contacts/{contact_id}", status_code=204)
+def delete_contact(contact_id: UUID, _: Principal = Depends(require_user)):
+    with db_conn() as conn:
+        if conn.execute(text("DELETE FROM contacts WHERE id=:id RETURNING id"), {"id": contact_id}).first() is None:
+            raise HTTPException(status_code=404, detail="contact not found")
 
 
 @router.post("/companies/import", status_code=201)
