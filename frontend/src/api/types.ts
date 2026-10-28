@@ -8,6 +8,10 @@ export interface Contact {
   id: string
   name: string | null
   title: string | null
+  department?: string | null
+  management_level?: ManagementLevel | null
+  linkedin_url?: string | null
+  verified_at?: string | null
   phone: string | null
   phone_e164: string | null
   email: string | null
@@ -24,11 +28,28 @@ export interface Company {
   website: string | null
   city: string | null
   industry_label: string | null
+  industry_code?: string | null
+  company_form?: string | null
+  postal_code?: string | null
+  street_address?: string | null
+  registration_date?: string | null
   status: string
   source: string
   notes: string | null
   contact_count?: number
   updated_at: string
+  // profile
+  employees?: number | null
+  revenue_eur?: number | string | null
+  founded_year?: number | null
+  description?: string | null
+  phone?: string | null
+  email?: string | null
+  linkedin_url?: string | null
+  logo_url?: string | null
+  technologies?: string[]
+  owner_id?: string | null
+  owner_name?: string | null
 }
 
 export interface CompanyDetail extends Company {
@@ -36,6 +57,139 @@ export interface CompanyDetail extends Company {
   calls: CallRow[]
   bookings: Booking[]
   tasks: { id: string; campaign_name: string; status: string; attempts: number; due_at: string }[]
+  lists: { id: string; name: string; kind: string }[]
+}
+
+export type ManagementLevel = 'owner' | 'c_level' | 'vp' | 'director' | 'manager' | 'staff'
+export const LEVEL_LABELS: Record<ManagementLevel, string> = {
+  owner: 'Omistaja / yrittäjä', c_level: 'Johtoryhmä (C-taso)', vp: 'Varatoimitusjohtaja', director: 'Johtaja', manager: 'Päällikkö', staff: 'Asiantuntija',
+}
+
+/** One row of GET /search/companies: a company Luuri knows (in_db) or a register hit. */
+export interface CompanyHit {
+  id: string | null
+  in_db: boolean
+  business_id: string | null
+  name: string
+  website: string | null
+  city: string | null
+  postal_code?: string | null
+  street_address?: string | null
+  industry_code: string | null
+  industry_label: string | null
+  company_form: string | null
+  registration_date: string | null
+  status: string | null
+  source: string
+  employees: number | null
+  revenue_eur: number | string | null
+  contact_count: number
+  phone_count: number
+  email_count: number
+  last_call_at?: string | null
+  booking_count?: number
+  owner_name?: string | null
+  phone?: string | null
+}
+
+export interface CompanySearchResult {
+  items: CompanyHit[]
+  local_count: number
+  register_total: number
+  register_error: string | null
+  page: number
+}
+
+export interface ContactHit {
+  id: string
+  company_id: string
+  name: string | null
+  title: string | null
+  department: string | null
+  management_level: ManagementLevel | null
+  phone: string | null
+  phone_e164: string | null
+  email: string | null
+  linkedin_url: string | null
+  is_primary: boolean
+  do_not_call: boolean
+  confidence: number | null
+  source: string
+  verified_at: string | null
+  company_name: string
+  business_id: string | null
+  city: string | null
+  industry_label: string | null
+  company_status: string
+  website: string | null
+  last_call_at: string | null
+}
+
+export interface Facets {
+  cities: { city: string; n: number }[]
+  industries: { industry_code: string | null; industry_label: string; n: number }[]
+  titles: { title: string; n: number }[]
+  departments: { department: string; n: number }[]
+  owners: { id: string; name: string }[]
+  management_levels: ManagementLevel[]
+  company_forms: string[]
+}
+
+export interface List {
+  id: string
+  name: string
+  kind: 'company' | 'contact'
+  description: string | null
+  owner_id: string | null
+  owner_name: string | null
+  shared: boolean
+  member_count: number
+  company_count: number
+  phone_count: number
+  created_at: string
+  updated_at: string
+}
+
+export interface ListMember {
+  id: string
+  company_id: string
+  contact_id: string | null
+  added_at: string
+  added_by_name: string | null
+  company_name: string
+  business_id: string | null
+  city: string | null
+  industry_label: string | null
+  company_status: string
+  website: string | null
+  employees: number | null
+  contact_name: string | null
+  title: string | null
+  phone_e164: string | null
+  email: string | null
+  do_not_call: boolean | null
+  phone_count: number
+  last_call_at: string | null
+}
+
+export interface ListDetail extends List {
+  members: ListMember[]
+}
+
+export interface SavedSearch {
+  id: string
+  name: string
+  scope: 'company' | 'contact'
+  criteria: Record<string, unknown>
+  owner_name: string | null
+  last_run_at: string | null
+  last_result_count: number | null
+  created_at: string
+}
+
+export const STATUS_LABELS: Record<string, string> = {
+  prospect: 'Prospekti', contacted: 'Kontaktoitu', qualified: 'Kvalifioitu', customer: 'Asiakas',
+  disqualified: 'Ei sovi', do_not_call: 'Ei saa soittaa',
 }
 
 export interface Campaign {
