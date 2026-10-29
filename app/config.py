@@ -79,6 +79,11 @@ class Settings(BaseSettings):
     ELKS_API_BASE: str = "https://api.46elks.com/a1"
     TELEPHONY_AGENT_TIMEOUT_SECONDS: int = 25   # how long the caller's phone rings
     TELEPHONY_RECORD_CALLS: bool = False
+    # Telnyx (browser calls, ADR-0009): a SIP credential connection + an outbound voice profile with "record all calls".
+    TELNYX_API_KEY: str | None = None
+    TELNYX_CONNECTION_ID: str | None = None
+    TELNYX_API_BASE: str = "https://api.telnyx.com/v2"
+    TELEPHONY_CLIENT_STALE_SECONDS: int = 120   # browser call with no heartbeat this long → failed
     TELEPHONY_RECORDING_WEBHOOK: str = "https://luuri.invalid/recording"  # placeholder, see elks.py
 
     @field_validator(
@@ -86,7 +91,7 @@ class Settings(BaseSettings):
         "MOVINGFIRM_BACKEND_URL", "MOVINGFIRM_INTERNAL_TOKEN", "TWENTY_API_URL",
         "TWENTY_API_KEY", "WEBHOOK_SIGNING_SECRET", "ANALYTICS_UX_EVENTS_URL", "SMTP_HOST", "SMTP_USER", "SMTP_PASSWORD", "SMTP_FROM",
         "MIRA_AGENT_URL", "MIRA_AGENT_TOKEN", "TELEPHONY_PROVIDER", "TELEPHONY_FROM_NUMBER",
-        "ELKS_API_USER", "ELKS_API_PASSWORD", "MIRARUN_URL", "MIRARUN_SESSION_TOKEN",
+        "ELKS_API_USER", "ELKS_API_PASSWORD", "TELNYX_API_KEY", "TELNYX_CONNECTION_ID", "MIRARUN_URL", "MIRARUN_SESSION_TOKEN",
         "STT_BASE_URL", "STT_API_KEY",
         mode="before",
     )

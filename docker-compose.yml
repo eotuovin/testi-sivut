@@ -65,6 +65,9 @@ x-app-env: &app-env
   ELKS_API_USER: ${ELKS_API_USER:-}
   ELKS_API_PASSWORD: ${ELKS_API_PASSWORD:-}
   TELEPHONY_RECORD_CALLS: ${TELEPHONY_RECORD_CALLS:-false}
+  # Telnyx browser calls (TELEPHONY_PROVIDER=telnyx): API key + SIP credential connection id.
+  TELNYX_API_KEY: ${TELNYX_API_KEY:-}
+  TELNYX_CONNECTION_ID: ${TELNYX_CONNECTION_ID:-}
 
 services:
   db:

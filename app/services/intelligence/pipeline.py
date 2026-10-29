@@ -49,8 +49,12 @@ def maybe_queue_notes_analysis(conn, call: dict) -> bool:
 
 # ---------------------------------------------------------------- recordings
 def fetch_recordings(client: httpx.Client) -> int:
-    """Pull the 46elks recording for ended, consented calls that have none yet."""
-    if not (settings.TELEPHONY_RECORD_CALLS and settings.TELEPHONY_PROVIDER == "46elks"):
+    """Pull the operator's recording for ended, consented calls that have none yet."""
+    if not settings.TELEPHONY_RECORD_CALLS:
+        return 0
+    if settings.TELEPHONY_PROVIDER == "telnyx":
+        return _fetch_telnyx_recordings(client)
+    if settings.TELEPHONY_PROVIDER != "46elks":
         return 0
     from app.services.telephony.elks import ElksProvider
 
@@ -88,6 +92,59 @@ def fetch_recordings(client: httpx.Client) -> int:
                 ),
                 {"c": row["call_id"], "s": row["session_id"], "pid": rec.get("id"), "ct": ctype, "a": audio, "n": len(audio)},
             )
+        done += 1
+    return done
+
+
+def _fetch_telnyx_recordings(client: httpx.Client) -> int:
+    """Telnyx records outbound calls itself (portal setting); match each ended,
+    consented browser call to its recording and pull the audio in."""
+    from app.services.telephony.telnyx import TelnyxProvider
+
+    with db_conn() as conn:
+        rows = conn.execute(
+            text(
+                """
+                SELECT s.id AS session_id, s.provider_session_id, s.customer_number, s.created_at, s.call_id
+                FROM call_sessions s JOIN calls c ON c.id = s.call_id
+                WHERE s.provider = 'telnyx' AND s.state = 'ended' AND c.recording_consent
+                  AND s.answered_at IS NOT NULL AND s.ended_at > now() - interval '2 days' AND s.ended_at < now() - interval '1 minute'
+                  AND NOT EXISTS (SELECT 1 FROM call_recordings r WHERE r.session_id = s.id)
+                  AND (s.error IS NULL OR s.error NOT LIKE 'nauhoite%')
+                ORDER BY s.ended_at DESC
+                LIMIT 10
+                """
+            )
+        ).mappings().all()
+    p = TelnyxProvider()
+    done = 0
+    for row in rows:
+        rec = p.find_recording(provider_session_id=row["provider_session_id"], customer_number=row["customer_number"], started_at=row["created_at"], client=client)
+        if rec is None:
+            continue
+        urls = rec.get("download_urls") or {}
+        got = p.download(urls.get("mp3") or urls.get("wav"), client)
+        if got is None:
+            continue
+        audio, ctype = got
+        if len(audio) > settings.RECORDING_MAX_BYTES:
+            log.warning("recording %s too large (%d bytes), skipped", rec.get("id"), len(audio))
+            continue
+        with db_conn() as conn:
+            # source keeps its original CHECK ('46elks' | 'upload'); provider says where it really came from
+            inserted = conn.execute(
+                text(
+                    "INSERT INTO call_recordings (call_id, session_id, source, provider, provider_recording_id, content_type, audio, audio_bytes, duration_seconds) "
+                    "VALUES (:c, :s, 'upload', 'telnyx', :pid, :ct, :a, :n, :d) ON CONFLICT DO NOTHING RETURNING id"
+                ),
+                {"c": row["call_id"], "s": row["session_id"], "pid": rec.get("id"), "ct": ctype, "a": audio, "n": len(audio),
+                 "d": int(rec["duration_millis"] / 1000) if rec.get("duration_millis") else None},
+            ).first()
+            if inserted is None:
+                # that Telnyx recording already belongs to another session: note it on the session so it is not retried
+                log.warning("telnyx recording %s already stored; session %s left without audio", rec.get("id"), row["session_id"])
+                conn.execute(text("UPDATE call_sessions SET error = COALESCE(error, 'nauhoite kuului toiseen puheluun') WHERE id=:id"), {"id": row["session_id"]})
+                continue
         done += 1
     return done
 

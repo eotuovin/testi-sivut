@@ -143,6 +143,21 @@ Tarvittavat tunnukset (Ilari asettaa stackiin): `ELKS_API_USER`,
 suomalainen numero, ~3 €/kk; puhelut ~0,02–0,05 €/min per leg, kaksi legiä).
 Uusi operaattori = `Provider`-aliluokka `app/services/telephony/`.
 
+### Soittaminen selaimessa (Telnyx, ADR-0009)
+
+Kun `TELEPHONY_PROVIDER=telnyx`, Soita-näkymässä on **Soita selaimessa**:
+puhelu kuuluu kuulokkeissa, ei puhelinta. Luuri antaa selaimelle Telnyxin
+JWT:n (`POST /telephony/webrtc/token`; yksi credential per käyttäjä), selain
+soittaa suoraan Telnyxiin ja raportoi tilan Luurille
+(`POST /telephony/sessions/{id}/state`). Nauhoitus kytketään Telnyxin
+portaalissa (Outbound Voice Profile → record all calls) ja
+`TELEPHONY_RECORD_CALLS=true`; worker hakee nauhoitteen puhelun jälkeen
+(`GET /v2/recordings`) ja litterointi + analyysi jatkuvat kuten ennen.
+
+Tarvittavat tunnukset: `TELNYX_API_KEY`, `TELNYX_CONNECTION_ID` (SIP
+credential connection, jossa outbound voice profile ja suomalainen numero),
+`TELEPHONY_FROM_NUMBER`.
+
 ## Tekoäly ja puheluäly (Mira)
 
 ### Miten Luuri käyttää Miraa
