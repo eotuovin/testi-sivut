@@ -12,6 +12,7 @@ import { useAuthStore } from '../stores/auth'
 import AddToListModal from '../components/AddToListModal.vue'
 import EnrollModal from '../components/EnrollModal.vue'
 import CompanyLogo from '../components/CompanyLogo.vue'
+import CampaignPicker from '../components/CampaignPicker.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -327,8 +328,8 @@ function fmtRev(v: number | string | null) { if (v === null) return '—'; const
           <span class="sel">{{ selected.size }} valittu</span>
           <button class="small" @click="showList = true">+ Lisää listaan</button>
           <button class="small" @click="showEnroll = true">Sekvenssiin</button>
-          <select v-model="enqueueCampaign" style="width:auto" class="small"><option value="">Soittojonoon…</option><option v-for="c in campaigns" :key="c.id" :value="c.id">{{ c.name }}</option></select>
-          <button class="small primary" :disabled="!enqueueCampaign" @click="enqueue">Lisää jonoon</button>
+          <CampaignPicker v-model="enqueueCampaign" />
+          <button class="small primary" :disabled="!enqueueCampaign || enqueueCampaign === '__new'" @click="enqueue">Lisää jonoon</button>
           <button class="small" @click="exportCsv">Vie CSV</button>
           <button class="ghost small" @click="selected = new Set()">Tyhjennä valinta</button>
         </template>

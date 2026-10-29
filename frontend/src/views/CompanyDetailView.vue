@@ -9,6 +9,7 @@ import { LEVEL_LABELS, OUTCOME_LABELS, STATUS_LABELS } from '../api/types'
 import { fmtDate, fmtDateTime, fmtEur } from '../format'
 import CallAnalysisPanel from '../components/CallAnalysisPanel.vue'
 import CompanyLogo from '../components/CompanyLogo.vue'
+import CampaignPicker from '../components/CampaignPicker.vue'
 import AddToListModal from '../components/AddToListModal.vue'
 import EnrollModal from '../components/EnrollModal.vue'
 
@@ -134,8 +135,8 @@ const statusClass = (s: string) => ({ ok: s === 'customer', danger: s === 'do_no
           </div>
         </div>
         <div class="actions">
-          <select v-model="campaign" style="width:auto"><option value="">Soittojonoon…</option><option v-for="c in campaigns" :key="c.id" :value="c.id">{{ c.name }}</option></select>
-          <button class="primary" :disabled="!campaign" @click="enqueue">Lisää jonoon</button>
+          <CampaignPicker v-model="campaign" />
+          <button class="primary" :disabled="!campaign || campaign === '__new'" @click="enqueue">Lisää jonoon</button>
           <button @click="showList = true">+ Listaan</button>
           <button @click="showEnroll = true">Sekvenssiin</button>
           <select :value="company.status" style="width:auto" @change="patch({ status: ($event.target as HTMLSelectElement).value })">
