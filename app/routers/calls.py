@@ -21,6 +21,7 @@ from app.auth import Principal, require_read, require_user
 from app.db import db_conn
 from app.phone import canonical_phone
 from app.services.outbox import emit
+from app.services.sequences import on_call_logged
 
 router = APIRouter()
 
@@ -258,6 +259,7 @@ def log_call(body: CallLogIn, p: Principal = Depends(require_user)):
         emit(conn, "call.logged", "call", call["id"], {**dict(call), "caller_name": p.name,
                                                       "via": session["provider"] if session else "tel",
                                                       "recording_url": session["recording_url"] if session else None})
+        on_call_logged(conn, call["task_id"], call["company_id"], body.outcome)
         if session is not None:
             conn.execute(text("UPDATE call_sessions SET call_id=:c, recording_consent=:rc WHERE id=:id"),
                          {"c": call["id"], "rc": body.recording_consent, "id": session["id"]})

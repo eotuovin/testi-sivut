@@ -72,7 +72,8 @@ frontend (Vue)  ──/api──▶  app.main (FastAPI)  ──▶  Postgres
 `company.created`, `company.updated`, `contact.created`, `call.logged`,
 `booking.created`, `booking.updated`, `prospecting.run_finished`,
 `prospect.approved`, `call.analyzed`, `insight.report_created`,
-`list.created`, `list.members_added`, `search.saved`.
+`list.created`, `list.members_added`, `search.saved`,
+`sequence.enrolled`, `sequence.step_done`, `sequence.finished`.
 
 Webhook-payload:
 
@@ -115,7 +116,7 @@ muodossa:
 | `actor_type` | `sales_agent` (uusi arvo; sarakkeella ei ole CHECKiä tarkoituksella, ks. backend-migraatio 008) |
 | `interaction_surface` | `luuri` (uusi arvo) |
 | `session_id` | `luuri-{company_id}` |
-| `event_data` | `luuri_event`, `aggregate_id`, `campaign_id`, `company_id`, `outcome`, `duration_seconds`, `booking_status`, `value_eur`, `caller`, puheluälystä `analysis_source`, `sentiment`, `interest_level`, `stage_reached`, `objection_categories`, `blocker_categories`, hakupöydästä `list_id`, `list_kind`, `members_added`, `members_from_register`, `search_scope`, `search_filters` (vain suodattimien nimet, ei arvoja) |
+| `event_data` | `luuri_event`, `aggregate_id`, `campaign_id`, `company_id`, `outcome`, `duration_seconds`, `booking_status`, `value_eur`, `caller`, puheluälystä `analysis_source`, `sentiment`, `interest_level`, `stage_reached`, `objection_categories`, `blocker_categories`, hakupöydästä `list_id`, `list_kind`, `members_added`, `members_from_register`, `search_scope`, `search_filters` (vain suodattimien nimet, ei arvoja), sekvensseistä `sequence_id`, `step_kind`, `step_position`, `sent_via`, `finished_reason` (ei koskaan viestin tekstiä) |
 
 Admin-puolella nämä näkyvät `GET /internal/ux-events`-virrassa; funneliin
 lisääminen = uusi vertical `admin.funnel_stages`-migraatiolla (ei tehty tässä).
@@ -250,6 +251,20 @@ tason mukaan. Valinnat kerätään listoiksi (`/lists`), joista voi viedä CSV:n
 tai työntää koko listan kampanjan jonoon; rekisteriosumat tallentuvat Luuriin
 vasta kun ne lisätään listaan tai jonoon (`POST /companies/from-register`).
 Tallennetut haut (`/saved-searches`) näkyvät kaikille myyjille.
+
+## Sekvenssit (Sekvenssit, Tehtävät)
+
+Apollo-tyylinen ketju kosketuksia samalle liidille: askeleet `email` / `call` /
+`task`, kullakin viive edellisestä. Yritys (tai henkilö) kirjataan ketjuun
+hausta, listalta tai yritysprofiilista (`POST /sequences/{id}/enroll`). Core-
+worker (`app/services/sequences.py: tick`) toteuttaa erääntyneet askeleet:
+soitto → `call_tasks`-rivi sekvenssin kampanjan jonoon (etusijalla, henkilö
+kiinnitettynä); sähköposti → lähetetään SMTP:llä kun `SMTP_HOST` on asetettu,
+muuten jää Tehtävät-sivulle myyjän lähetettäväksi (mailto + ”Lähetin sen”);
+tehtävä → Tehtävät-sivulle. Puhelun tulos, joka on sekvenssin
+`stop_on_outcomes`-listalla (oletus: bookattu, ei kiinnosta, ei saa soittaa, on
+jo asiakas), pysäyttää ketjun. Muuttujat teksteissä: `{{etunimi}}`, `{{nimi}}`,
+`{{yritys}}`, `{{paikkakunta}}`, `{{titteli}}`, `{{myyja}}`, `{{tuote}}`.
 
 ## Tietomalli
 

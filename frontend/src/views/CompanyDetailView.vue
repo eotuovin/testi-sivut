@@ -4,12 +4,13 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { apiDelete, apiGet, apiPatch, apiPost, errorText } from '../api/client'
-import type { Booking, CallRow, Campaign, CompanyDetail, Contact, Facets, ManagementLevel } from '../api/types'
+import type { Booking, CallRow, Campaign, CompanyDetail, CompanySequence, Contact, Facets, ManagementLevel } from '../api/types'
 import { LEVEL_LABELS, OUTCOME_LABELS, STATUS_LABELS } from '../api/types'
 import { fmtDate, fmtDateTime, fmtEur } from '../format'
 import CallAnalysisPanel from '../components/CallAnalysisPanel.vue'
 import CompanyLogo from '../components/CompanyLogo.vue'
 import AddToListModal from '../components/AddToListModal.vue'
+import EnrollModal from '../components/EnrollModal.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -22,6 +23,8 @@ const tab = ref<'overview' | 'people' | 'activity' | 'notes'>('overview')
 const notes = ref('')
 const openCall = ref<string | null>(null)
 const showList = ref(false)
+const showEnroll = ref(false)
+const seqs = ref<CompanySequence[]>([])
 const campaign = ref('')
 const editFacts = ref(false)
 const facts = ref({ employees: '', revenue_eur: '', founded_year: '', phone: '', email: '', website: '', linkedin_url: '', street_address: '', postal_code: '', city: '', industry_label: '', description: '', technologies: '' })
@@ -34,6 +37,7 @@ async function load() {
     const c = await apiGet<CompanyDetail>(`/companies/${route.params.id}`)
     company.value = c
     notes.value = c.notes ?? ''
+    seqs.value = await apiGet<CompanySequence[]>(`/companies/${c.id}/sequences`)
     facts.value = {
       employees: c.employees?.toString() ?? '', revenue_eur: c.revenue_eur?.toString() ?? '', founded_year: c.founded_year?.toString() ?? '',
       phone: c.phone ?? '', email: c.email ?? '', website: c.website ?? '', linkedin_url: c.linkedin_url ?? '', street_address: c.street_address ?? '',
@@ -87,6 +91,7 @@ async function saveContact() {
 }
 async function contactAction(c: Contact, body: Record<string, unknown>) { await apiPatch(`/contacts/${c.id}`, body); await load() }
 async function deleteContact(c: Contact) { if (confirm(`Poistetaanko ${c.name || 'yhteyshenkilö'}?`)) { await apiDelete(`/contacts/${c.id}`); await load() } }
+async function stopSeq(id: string) { await apiPost(`/sequences/enrollments/${id}/stop`); await load() }
 async function enqueue() {
   if (!company.value || !campaign.value) return
   try {
@@ -132,6 +137,7 @@ const statusClass = (s: string) => ({ ok: s === 'customer', danger: s === 'do_no
           <select v-model="campaign" style="width:auto"><option value="">Soittojonoon…</option><option v-for="c in campaigns" :key="c.id" :value="c.id">{{ c.name }}</option></select>
           <button class="primary" :disabled="!campaign" @click="enqueue">Lisää jonoon</button>
           <button @click="showList = true">+ Listaan</button>
+          <button @click="showEnroll = true">Sekvenssiin</button>
           <select :value="company.status" style="width:auto" @change="patch({ status: ($event.target as HTMLSelectElement).value })">
             <option v-for="(l, k) in STATUS_LABELS" :key="k" :value="k">{{ l }}</option>
           </select>
@@ -187,6 +193,13 @@ const statusClass = (s: string) => ({ ok: s === 'customer', danger: s === 'do_no
             <div class="fact"><div class="k">Soittoja</div><div class="v">{{ company.calls.length }}</div></div>
             <div class="fact"><div class="k">Bookkauksia</div><div class="v">{{ company.bookings.length }}</div></div>
             <div class="fact"><div class="k">Viim. soitto</div><div class="v">{{ company.calls[0] ? fmtDate(company.calls[0].started_at) : '—' }}</div></div>
+          </div>
+          <h3 style="margin-top:0.8rem">Sekvenssit</h3>
+          <div v-if="!seqs.length" class="muted small">Ei ketjussa.</div>
+          <div v-for="s in seqs" :key="s.id" class="small row" style="gap:0.4rem">
+            <router-link to="/sekvenssit">{{ s.sequence_name }}</router-link> · {{ s.current_step }}/{{ s.step_count }}
+            <span class="tag" :class="{ info: s.status === 'active', ok: s.status === 'finished', warn: s.status === 'stopped', danger: s.status === 'failed' }">{{ s.status === 'active' ? (s.next_at ? 'seuraava ' + fmtDateTime(s.next_at) : 'käynnissä') : s.finished_reason }}</span>
+            <button v-if="s.status === 'active'" class="ghost small" @click="stopSeq(s.id)">Lopeta</button>
           </div>
           <h3 style="margin-top:0.8rem">Soittojonossa</h3>
           <div v-if="!company.tasks.length" class="muted small">Ei missään kampanjassa.</div>
@@ -276,4 +289,5 @@ const statusClass = (s: string) => ({ ok: s === 'customer', danger: s === 'do_no
   </div>
 
   <AddToListModal v-if="showList && company" kind="company" :company-ids="[company.id]" @close="showList = false" @added="showList = false; load()" />
+  <EnrollModal v-if="showEnroll && company" :company-ids="[company.id]" @close="showEnroll = false" @enrolled="(r) => { showEnroll = false; notice = r.enrolled ? `Lisätty ketjuun ”${r.sequence.name}”` : 'On jo tässä ketjussa'; load() }" />
 </template>

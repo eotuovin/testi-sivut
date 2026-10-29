@@ -5,11 +5,12 @@
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { apiDelete, apiGet, apiPost, errorText } from '../api/client'
-import type { Campaign, CompanyHit, CompanySearchResult, ContactHit, Facets, List, SavedSearch } from '../api/types'
+import type { Campaign, CompanyHit, CompanySearchResult, ContactHit, Facets, List, SavedSearch, Sequence } from '../api/types'
 import { LEVEL_LABELS, STATUS_LABELS } from '../api/types'
 import { fmtDate, fmtEur } from '../format'
 import { useAuthStore } from '../stores/auth'
 import AddToListModal from '../components/AddToListModal.vue'
+import EnrollModal from '../components/EnrollModal.vue'
 import CompanyLogo from '../components/CompanyLogo.vue'
 
 const route = useRoute()
@@ -39,6 +40,7 @@ const error = ref('')
 const notice = ref('')
 const selected = ref<Set<string>>(new Set())
 const showList = ref(false)
+const showEnroll = ref(false)
 const showSave = ref(false)
 const saveName = ref('')
 const enqueueCampaign = ref('')
@@ -153,6 +155,11 @@ async function enqueue() {
   } catch (e) {
     error.value = errorText(e)
   }
+}
+function onEnrolled(r: { sequence: Sequence; enrolled: number; skipped: number }) {
+  showEnroll.value = false
+  notice.value = `${r.enrolled} lisätty ketjuun ”${r.sequence.name}”` + (r.skipped ? ` (${r.skipped} oli jo)` : '')
+  selected.value = new Set()
 }
 function onAdded(r: { list: List; added: number }) {
   showList.value = false
@@ -319,6 +326,7 @@ function fmtRev(v: number | string | null) { if (v === null) return '—'; const
           <label class="check" style="margin:0"><input type="checkbox" :checked="true" @change="toggleAll" /></label>
           <span class="sel">{{ selected.size }} valittu</span>
           <button class="small" @click="showList = true">+ Lisää listaan</button>
+          <button class="small" @click="showEnroll = true">Sekvenssiin</button>
           <select v-model="enqueueCampaign" style="width:auto" class="small"><option value="">Soittojonoon…</option><option v-for="c in campaigns" :key="c.id" :value="c.id">{{ c.name }}</option></select>
           <button class="small primary" :disabled="!enqueueCampaign" @click="enqueue">Lisää jonoon</button>
           <button class="small" @click="exportCsv">Vie CSV</button>
@@ -405,6 +413,10 @@ function fmtRev(v: number | string | null) { if (v === null) return '—'; const
   <AddToListModal v-if="showList" :kind="scope" :company-ids="scope === 'company' ? selectedCompanies.filter((h) => h.id).map((h) => h.id as string) : []"
     :register="scope === 'company' ? selectedCompanies.filter((h) => !h.id) : []" :contact-ids="scope === 'contact' ? selectedContacts.map((c) => c.id) : []"
     @close="showList = false" @added="onAdded" />
+
+  <EnrollModal v-if="showEnroll" :company-ids="scope === 'company' ? selectedCompanies.filter((h) => h.id).map((h) => h.id as string) : []"
+    :register="scope === 'company' ? selectedCompanies.filter((h) => !h.id) : []" :contact-ids="scope === 'contact' ? selectedContacts.map((c) => c.id) : []"
+    @close="showEnroll = false" @enrolled="onEnrolled" />
 
   <div v-if="showSave" class="modal" @click.self="showSave = false">
     <div class="box">

@@ -6,7 +6,8 @@ Event catalogue (keep in sync with README "Events"):
   call.logged, booking.created, booking.updated,
   prospecting.run_finished, prospect.approved,
   call.analyzed, insight.report_created,
-  list.created, list.members_added, search.saved
+  list.created, list.members_added, search.saved,
+  sequence.enrolled, sequence.step_done, sequence.finished
 """
 from __future__ import annotations
 
@@ -32,6 +33,9 @@ EVENT_TYPES = frozenset(
         "list.created",
         "list.members_added",
         "search.saved",
+        "sequence.enrolled",
+        "sequence.step_done",
+        "sequence.finished",
     }
 )
 

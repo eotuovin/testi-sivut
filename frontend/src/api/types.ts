@@ -393,3 +393,99 @@ export const OUTCOME_LABELS: Record<Outcome, string> = {
   do_not_call: 'Ei saa soittaa',
   already_customer: 'On jo asiakas',
 }
+
+// ---------------------------------------------------------------- sequences
+export type StepKind = 'call' | 'email' | 'task'
+export const STEP_LABELS: Record<StepKind, string> = { call: 'Soitto', email: 'Sähköposti', task: 'Tehtävä' }
+
+export interface SequenceStep {
+  id?: string
+  position?: number
+  kind: StepKind
+  delay_days: number
+  delay_hours: number
+  title: string | null
+  body: string | null
+}
+
+export interface Sequence {
+  id: string
+  name: string
+  description: string | null
+  campaign_id: string | null
+  campaign_name: string | null
+  status: 'active' | 'paused' | 'archived'
+  stop_on_outcomes: string[]
+  owner_name: string | null
+  step_count: number
+  active_count: number
+  finished_count: number
+  stopped_count: number
+  booked_count: number
+  created_at: string
+  updated_at: string
+}
+
+export interface SequenceEnrollment {
+  id: string
+  sequence_id: string
+  company_id: string
+  contact_id: string | null
+  status: 'active' | 'finished' | 'stopped' | 'failed'
+  current_step: number
+  next_at: string | null
+  finished_reason: string | null
+  created_at: string
+  company_name: string
+  business_id: string | null
+  city: string | null
+  contact_name: string | null
+  contact_title: string | null
+  contact_email: string | null
+  started_by_name: string | null
+  done_steps: number
+}
+
+export interface SequenceDetail extends Sequence {
+  steps: SequenceStep[]
+  enrollments: SequenceEnrollment[]
+}
+
+export interface SequenceAction {
+  id: string
+  enrollment_id: string
+  position: number
+  kind: StepKind
+  status: 'pending' | 'done' | 'skipped' | 'failed'
+  due_at: string
+  done_at: string | null
+  email_to: string | null
+  subject: string | null
+  body: string | null
+  sent_via: string | null
+  error: string | null
+  sequence_id: string
+  sequence_name: string
+  company_id: string
+  company_name: string
+  website: string | null
+  contact_id: string | null
+  contact_name: string | null
+  contact_title: string | null
+  phone_e164: string | null
+  contact_email: string | null
+  started_by_name: string | null
+}
+
+export interface CompanySequence {
+  id: string
+  status: SequenceEnrollment['status']
+  current_step: number
+  next_at: string | null
+  finished_reason: string | null
+  created_at: string
+  sequence_id: string
+  sequence_name: string
+  step_count: number
+  contact_name: string | null
+}
