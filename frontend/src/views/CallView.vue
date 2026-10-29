@@ -4,6 +4,7 @@
  *  call (number, script, notes), right = how it ended (outcome, callback,
  *  booking). Nothing here navigates away mid-call. */
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { useCallsStore } from '../stores/calls'
 import { apiGet, apiPatch, apiPost, errorText } from '../api/client'
 import type { CallLog, Contact, ManagementLevel } from '../api/types'
@@ -16,6 +17,8 @@ import { fmtDateTime } from '../format'
 
 const store = useCallsStore()
 const tel = useTelephonyStore()
+const route = useRoute()
+const router = useRouter()
 const intel = ref<{ recording_enabled: boolean } | null>(null)
 const error = ref('')
 const busy = ref(false)
@@ -33,9 +36,12 @@ let tick: number | undefined
 onMounted(async () => {
   tick = window.setInterval(() => (now.value = Date.now()), 1000)
   try {
-    await Promise.all([store.loadCampaigns(), store.loadCallbacks(), tel.load()])
+    await Promise.all([store.loadCampaigns(), store.loadCallbacks(), store.loadQueue(), tel.load()])
     intel.value = await apiGet<{ recording_enabled: boolean }>('/intelligence/status')
-    if (!store.task && !store.queueEmpty) await next()
+    if (typeof route.query.task === 'string') {
+      await claim(route.query.task)
+      router.replace({ query: {} })
+    } else if (!store.task && !store.queueEmpty) await next()
   } catch (e) {
     error.value = errorText(e)
   }
@@ -62,6 +68,18 @@ async function next() {
   try {
     await store.next()
     companyNotes.value = store.task?.company_notes ?? ''
+  } catch (e) {
+    error.value = errorText(e)
+  }
+}
+async function claim(taskId: string) {
+  error.value = ''
+  selectedContactId.value = null
+  editCompany.value = false
+  try {
+    await store.claim(taskId)
+    companyNotes.value = store.task?.company_notes ?? ''
+    await store.loadCallbacks()
   } catch (e) {
     error.value = errorText(e)
   }
@@ -155,6 +173,11 @@ async function verify(c: Contact) {
       </select>
       <button v-if="!store.task" class="primary" :disabled="store.loading" @click="next">Anna seuraava →</button>
       <button v-else class="ghost" @click="release">Palauta jonoon</button>
+      <span v-if="store.queue" class="small muted queue-info" :title="`${store.queue.waiting} odottaa omaa aikaansa · ${store.queue.in_progress} toisella soittajalla · ${store.queue.done} tehty`">
+        <strong>{{ store.queue.due_now }}</strong> jonossa nyt
+        <template v-if="store.queue.callbacks_due"> · <span :class="{ error: store.queue.my_callbacks_due > 0 }">{{ store.queue.callbacks_due }} takaisinsoittoa erääntynyt</span></template>
+        <template v-if="store.queue.waiting"> · {{ store.queue.waiting }} odottaa</template>
+      </span>
     </div>
     <div v-if="store.task" class="row small muted">
       <span class="tag">{{ store.task.campaign_name }}</span>
@@ -283,11 +306,11 @@ async function verify(c: Contact) {
     <h2>Omat takaisinsoitot</h2>
     <table class="small">
       <tr><th>Aika</th><th>Yritys</th><th>Henkilö</th><th>Kampanja</th></tr>
-      <tr v-for="c in store.callbacks" :key="c.task_id" :class="{ warn: new Date(c.due_at).getTime() < now }">
-        <td :class="{ error: new Date(c.due_at).getTime() < now }">{{ fmtDateTime(c.due_at) }}</td>
-        <td><router-link :to="'/yritykset/' + c.company_id">{{ c.company_name }}</router-link></td>
+      <tr v-for="c in store.callbacks" :key="c.task_id" class="clickable" :class="{ warn: new Date(c.due_at).getTime() < now }" title="Avaa tämä puhelu nyt" @click="claim(c.task_id)">
+        <td :class="{ error: new Date(c.due_at).getTime() < now }">{{ fmtDateTime(c.due_at) }}<span v-if="new Date(c.due_at).getTime() < now" class="tag danger" style="margin-left: 0.3rem">erääntynyt</span></td>
+        <td><strong>{{ c.company_name }}</strong> <router-link :to="'/yritykset/' + c.company_id" class="small" @click.stop>profiili</router-link></td>
         <td>{{ c.contact_name || '' }} {{ c.phone || '' }}</td>
-        <td>{{ c.campaign_name }}</td>
+        <td>{{ c.campaign_name }} <button class="small" style="margin-left: 0.4rem" @click.stop="claim(c.task_id)">Soita nyt →</button></td>
       </tr>
     </table>
   </div>

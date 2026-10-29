@@ -221,6 +221,26 @@ def create_company(body: CompanyIn, _: Principal = Depends(require_user)):
         return insert_company(conn, body)
 
 
+class BulkStatusIn(BaseModel):
+    company_ids: list[UUID] = Field(min_length=1, max_length=500)
+    status: str
+
+
+@router.post("/companies/bulk-status")
+def bulk_status(body: BulkStatusIn, _: Principal = Depends(require_user)):
+    """Set the same status on many companies (from the search selection)."""
+    if body.status not in STATUSES:
+        raise HTTPException(status_code=422, detail=f"status must be one of {STATUSES}")
+    with db_conn() as conn:
+        rows = conn.execute(
+            text("UPDATE companies SET status=:s WHERE id = ANY(CAST(:ids AS uuid[])) AND status <> :s RETURNING id, business_id, name, status"),
+            {"s": body.status, "ids": [str(i) for i in body.company_ids]},
+        ).mappings().all()
+        for r in rows:
+            emit(conn, "company.updated", "company", r["id"], dict(r))
+    return {"updated": len(rows)}
+
+
 @router.get("/companies/{company_id}")
 def get_company(company_id: UUID, _: Principal = Depends(require_read)):
     with db_conn() as conn:
@@ -359,6 +379,31 @@ def patch_contact(contact_id: UUID, body: ContactPatch, _: Principal = Depends(r
         if row is None:
             raise HTTPException(status_code=404, detail="contact not found")
     return dict(row)
+
+
+class ContactDncIn(BaseModel):
+    do_not_call: bool = True
+    blacklist_number: bool = False   # also put the number on the global do-not-call list
+    reason: str | None = Field(default=None, max_length=500)
+
+
+@router.post("/contacts/{contact_id}/do-not-call")
+def contact_do_not_call(contact_id: UUID, body: ContactDncIn, p: Principal = Depends(require_user)):
+    with db_conn() as conn:
+        row = conn.execute(
+            text("UPDATE contacts SET do_not_call=:d WHERE id=:id RETURNING id, phone_e164"), {"d": body.do_not_call, "id": contact_id}
+        ).mappings().first()
+        if row is None:
+            raise HTTPException(status_code=404, detail="contact not found")
+        if body.do_not_call and body.blacklist_number and row["phone_e164"]:
+            conn.execute(
+                text("INSERT INTO do_not_call (phone_e164, reason, created_by) VALUES (:p, :r, :u) ON CONFLICT (phone_e164) DO UPDATE SET reason = EXCLUDED.reason"),
+                {"p": row["phone_e164"], "r": body.reason, "u": p.id},
+            )
+            conn.execute(text("UPDATE contacts SET do_not_call = true WHERE phone_e164 = :p"), {"p": row["phone_e164"]})
+        if not body.do_not_call and row["phone_e164"]:
+            conn.execute(text("DELETE FROM do_not_call WHERE phone_e164=:p"), {"p": row["phone_e164"]})
+    return {"id": contact_id, "do_not_call": body.do_not_call}
 
 
 @router.delete("/contacts/{contact_id}", status_code=204)

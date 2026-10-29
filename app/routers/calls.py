@@ -131,6 +131,62 @@ def next_task(campaign_id: UUID | None = None, p: Principal = Depends(require_us
         return _task_view_for(conn, task_id, p.id)
 
 
+@router.post("/calls/tasks/{task_id}/claim")
+def claim_task(task_id: UUID, p: Principal = Depends(require_user)):
+    """Take one specific task now (a callback from the list, a company from its page)
+    instead of whatever the queue would hand out next."""
+    if p.id is None:
+        raise HTTPException(status_code=403, detail="a logged-in caller is required")
+    with db_conn() as conn:
+        row = conn.execute(
+            text(
+                """
+                UPDATE call_tasks t SET status='in_progress', locked_by=:uid, locked_until=now() + make_interval(mins => :lease)
+                FROM campaigns c, companies co
+                WHERE t.id=:id AND c.id=t.campaign_id AND co.id=t.company_id
+                  AND co.status NOT IN ('do_not_call','disqualified')
+                  AND (t.status IN ('queued','callback') OR (t.status='in_progress' AND (t.locked_by=:uid OR t.locked_until < now())))
+                RETURNING t.id
+                """
+            ),
+            {"id": task_id, "uid": p.id, "lease": LEASE_MINUTES},
+        ).first()
+        if row is None:
+            exists = conn.execute(text("SELECT status, locked_by FROM call_tasks WHERE id=:id"), {"id": task_id}).mappings().first()
+            if exists is None:
+                raise HTTPException(status_code=404, detail="task not found")
+            if exists["status"] == "in_progress":
+                raise HTTPException(status_code=409, detail="Toinen soittaja on juuri tämän yrityksen kimpussa.")
+            raise HTTPException(status_code=409, detail="Tehtävä ei ole enää jonossa.")
+        return _task_view_for(conn, task_id, p.id)
+
+
+@router.get("/calls/queue")
+def queue_summary(campaign_id: UUID | None = None, p: Principal = Depends(require_read)):
+    """What the caller is facing: due now, waiting for their time, callbacks (overdue counted)."""
+    with db_conn() as conn:
+        row = conn.execute(
+            text(
+                """
+                SELECT count(*) FILTER (WHERE t.status='queued' AND t.due_at <= now()) AS due_now,
+                       count(*) FILTER (WHERE t.status='queued' AND t.due_at > now()) AS waiting,
+                       count(*) FILTER (WHERE t.status='callback') AS callbacks,
+                       count(*) FILTER (WHERE t.status='callback' AND t.due_at <= now()) AS callbacks_due,
+                       count(*) FILTER (WHERE t.status='callback' AND t.due_at <= now() AND t.assigned_to=:uid) AS my_callbacks_due,
+                       count(*) FILTER (WHERE t.status='in_progress' AND t.locked_until > now()) AS in_progress,
+                       count(*) FILTER (WHERE t.status='done') AS done
+                FROM call_tasks t JOIN campaigns c ON c.id=t.campaign_id AND c.status='active'
+                WHERE (:cid IS NULL OR t.campaign_id=:cid)
+                """
+            ),
+            {"cid": campaign_id, "uid": p.id},
+        ).mappings().one()
+        pending_tasks = conn.execute(
+            text("SELECT count(*) FROM sequence_actions a WHERE a.status IN ('pending','failed') AND a.kind <> 'call' AND a.due_at <= now()")
+        ).scalar_one()
+    return {**dict(row), "pending_tasks": pending_tasks}
+
+
 @router.get("/calls/tasks/{task_id}")
 def get_task(task_id: UUID, p: Principal = Depends(require_read)):
     with db_conn() as conn:

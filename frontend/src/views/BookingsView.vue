@@ -25,6 +25,28 @@ async function setStatus(b: Booking, s: string) {
   await apiPatch(`/bookings/${b.id}`, { status: s })
   await load()
 }
+const editing = ref<Booking | null>(null)
+const ef = ref({ scheduled_at: '', duration_minutes: 30, location: '', meeting_url: '', value_eur: '' as string | number, notes: '' })
+function toLocal(iso: string | null) {
+  if (!iso) return ''
+  const d = new Date(iso); const p = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`
+}
+function startEdit(b: Booking) {
+  editing.value = b
+  ef.value = { scheduled_at: toLocal(b.scheduled_at), duration_minutes: b.duration_minutes ?? 30, location: b.location ?? '', meeting_url: b.meeting_url ?? '', value_eur: b.value_eur ?? '', notes: b.notes ?? '' }
+}
+async function saveEdit() {
+  if (!editing.value) return
+  try {
+    await apiPatch(`/bookings/${editing.value.id}`, {
+      scheduled_at: ef.value.scheduled_at ? new Date(ef.value.scheduled_at).toISOString() : null, duration_minutes: ef.value.duration_minutes,
+      location: ef.value.location || null, meeting_url: ef.value.meeting_url || null, value_eur: ef.value.value_eur === '' ? null : Number(ef.value.value_eur), notes: ef.value.notes || null,
+    })
+    editing.value = null
+    await load()
+  } catch (e) { error.value = errorText(e) }
+}
 const upcoming = computed(() => {
   const now = Date.now()
   const open = bookings.value.filter((b) => (b.status === 'booked' || b.status === 'confirmed') && b.scheduled_at && new Date(b.scheduled_at).getTime() >= now)
@@ -86,6 +108,22 @@ const kpi = computed(() => {
     </div>
   </div>
 
+  <div v-if="editing" class="modal" @click.self="editing = null">
+    <div class="box">
+      <h2>{{ editing.company_name }}</h2>
+      <p class="muted small">{{ editing.product }} · {{ editing.contact_name || '' }}</p>
+      <div class="grid2">
+        <div class="field"><label>Ajankohta</label><input v-model="ef.scheduled_at" type="datetime-local" /></div>
+        <div class="field"><label>Kesto</label><select v-model.number="ef.duration_minutes"><option :value="15">15 min</option><option :value="30">30 min</option><option :value="45">45 min</option><option :value="60">60 min</option></select></div>
+        <div class="field"><label>Missä</label><input v-model="ef.location" list="locs" /><datalist id="locs"><option>Teams</option><option>Google Meet</option><option>Puhelin</option><option>Asiakkaan luona</option><option>Meillä</option></datalist></div>
+        <div class="field"><label>Linkki tai osoite</label><input v-model="ef.meeting_url" /></div>
+        <div class="field"><label>Arvo (€)</label><input v-model="ef.value_eur" type="number" min="0" /></div>
+      </div>
+      <div class="field"><label>Sovitut asiat</label><textarea v-model="ef.notes" /></div>
+      <div class="row" style="justify-content: flex-end"><button class="ghost" @click="editing = null">Peruuta</button><button class="primary" @click="saveEdit">Tallenna</button></div>
+    </div>
+  </div>
+
   <div v-if="!bookings.length" class="empty">Ei bookkauksia vielä. Bookkaus syntyy, kun puhelun lopputulokseksi valitaan ”Bookattu!”.</div>
   <div v-else class="table-wrap">
     <table>
@@ -105,6 +143,7 @@ const kpi = computed(() => {
             </select>
           </td>
           <td class="small nowrap">
+            <button class="ghost small" title="Muokkaa aikaa, paikkaa, arvoa" @click="startEdit(b)">✎</button>
             <a v-if="b.scheduled_at" :href="'/api/bookings/' + b.id + '/ics'" title="Lataa kalenteritiedosto (Outlook, Google, Apple)">📅 .ics</a>
             <a v-if="b.calendar_html_link" :href="b.calendar_html_link" target="_blank" rel="noopener" style="margin-left: 0.5rem">Google</a>
             <a v-if="b.meeting_url" :href="b.meeting_url" target="_blank" rel="noopener" style="margin-left: 0.5rem">linkki</a>

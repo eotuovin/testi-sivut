@@ -8,6 +8,8 @@ import type { Booking, CallRow, Campaign, CompanyDetail, CompanySequence, Contac
 import { LEVEL_LABELS, OUTCOME_LABELS, STATUS_LABELS } from '../api/types'
 import { fmtDate, fmtDateTime, fmtEur } from '../format'
 import CallAnalysisPanel from '../components/CallAnalysisPanel.vue'
+import { useAuthStore } from '../stores/auth'
+const auth = useAuthStore()
 import CompanyLogo from '../components/CompanyLogo.vue'
 import CampaignPicker from '../components/CampaignPicker.vue'
 import AddToListModal from '../components/AddToListModal.vue'
@@ -91,6 +93,13 @@ async function saveContact() {
   } catch (e) { error.value = errorText(e) }
 }
 async function contactAction(c: Contact, body: Record<string, unknown>) { await apiPatch(`/contacts/${c.id}`, body); await load() }
+async function dnc(c: Contact, on: boolean) {
+  if (on && !confirm(`${c.name || 'Numero'} merkitään: ei saa soittaa. Numero lisätään kieltolistalle, eikä sitä tarjota kenellekään. Jatketaanko?`)) return
+  try {
+    await apiPost(`/contacts/${c.id}/do-not-call`, { do_not_call: on, blacklist_number: on, reason: on ? `pyydetty (${auth.me?.name ?? ''})` : null })
+    await load()
+  } catch (e) { error.value = errorText(e) }
+}
 async function deleteContact(c: Contact) { if (confirm(`Poistetaanko ${c.name || 'yhteyshenkilö'}?`)) { await apiDelete(`/contacts/${c.id}`); await load() } }
 async function stopSeq(id: string) { await apiPost(`/sequences/enrollments/${id}/stop`); await load() }
 async function enqueue() {
@@ -204,7 +213,9 @@ const statusClass = (s: string) => ({ ok: s === 'customer', danger: s === 'do_no
           </div>
           <h3 style="margin-top:0.8rem">Soittojonossa</h3>
           <div v-if="!company.tasks.length" class="muted small">Ei missään kampanjassa.</div>
-          <div v-for="t in company.tasks" :key="t.id" class="small">{{ t.campaign_name }} · <span class="tag">{{ t.status }}</span> · {{ t.attempts }} yritystä · {{ fmtDateTime(t.due_at) }}</div>
+          <div v-for="t in company.tasks" :key="t.id" class="small row" style="gap: 0.4rem">{{ t.campaign_name }} · <span class="tag">{{ t.status }}</span> · {{ t.attempts }} yritystä · {{ fmtDateTime(t.due_at) }}
+            <router-link v-if="t.status === 'queued' || t.status === 'callback'" class="btn small" :to="{ path: '/soita', query: { task: t.id } }">Soita nyt →</router-link>
+          </div>
         </div>
       </div>
     </div>
@@ -228,6 +239,8 @@ const statusClass = (s: string) => ({ ok: s === 'customer', danger: s === 'do_no
                   <button class="ghost small" @click="startEdit(c)">Muokkaa</button>
                   <button v-if="!c.is_primary" class="ghost small" title="Tee ensisijaiseksi" @click="contactAction(c, { is_primary: true })">★</button>
                   <button v-if="!c.verified_at" class="ghost small" title="Merkitse numero vahvistetuksi" @click="contactAction(c, { verified: true })">✓</button>
+                  <button v-if="!c.do_not_call" class="ghost small" title="Merkitse: ei saa soittaa (numero kieltolistalle)" @click="dnc(c, true)">⛔</button>
+                  <button v-else class="ghost small" title="Poista soittokielto" @click="dnc(c, false)">↩</button>
                   <button class="ghost small" @click="deleteContact(c)">✕</button>
                 </td>
               </tr>

@@ -32,6 +32,11 @@ async function save() {
     error.value = errorText(e)
   }
 }
+async function clearQueue(c: Campaign) {
+  if (!confirm(`Tyhjennetäänkö kampanjan ”${c.name}” jono? ${c.queued_tasks ?? 0} odottavaa soittoa merkitään ohitetuiksi. Takaisinsoitot säilyvät.`)) return
+  await apiPost(`/campaigns/${c.id}/clear-queue`)
+  await load()
+}
 async function setStatus(c: Campaign, status: string) {
   await apiPatch(`/campaigns/${c.id}`, { status })
   await load()
@@ -40,7 +45,7 @@ async function setStatus(c: Campaign, status: string) {
 
 <template>
   <h1>Kampanjat</h1>
-  <p class="muted small">Kampanja = mitä myydään + spiikki + soittosäännöt. Yritykset lisätään kampanjan jonoon Yritykset- tai Prospektointi-sivulta.</p>
+  <p class="muted small">Kampanja = mitä myydään + spiikki + soittosäännöt. Yritykset lisätään kampanjan jonoon Hausta, listalta, sekvenssistä tai Agentin ehdotuksista.</p>
   <p v-if="error" class="error">{{ error }}</p>
   <button class="primary" style="margin-bottom: 1rem" @click="startNew">+ Uusi kampanja</button>
 
@@ -59,17 +64,19 @@ async function setStatus(c: Campaign, status: string) {
 
   <div v-if="!campaigns.length" class="empty">Ei kampanjoita. Luo ensimmäinen.</div>
   <table v-else>
-    <tr><th>Nimi</th><th>Tuote</th><th>Tila</th><th>Jonossa</th><th>Soitettu</th><th>Bookattu</th><th></th></tr>
+    <tr><th>Nimi</th><th>Tuote</th><th>Tila</th><th>Jonossa</th><th>Takaisinsoitot</th><th>Soitettu</th><th>Ohitettu</th><th>Bookattu</th><th></th></tr>
     <tr v-for="c in campaigns" :key="c.id">
       <td><strong>{{ c.name }}</strong></td>
       <td>{{ c.product }}</td>
       <td><span class="tag" :class="{ ok: c.status === 'active', warn: c.status === 'paused' }">{{ c.status }}</span></td>
-      <td>{{ c.open_tasks }}</td><td>{{ c.done_tasks }}</td><td><strong>{{ c.bookings }}</strong></td>
+      <td class="mono">{{ c.queued_tasks ?? c.open_tasks }}<span v-if="c.in_progress_tasks" class="muted small"> (+{{ c.in_progress_tasks }} kesken)</span></td>
+      <td class="mono">{{ c.callback_tasks ?? 0 }}</td><td class="mono">{{ c.done_tasks }}</td><td class="mono muted">{{ c.skipped_tasks ?? 0 }}</td><td><strong>{{ c.bookings }}</strong></td>
       <td class="row">
         <button class="small" @click="editing = { ...c }">Muokkaa</button>
         <button v-if="c.status !== 'active'" class="small" @click="setStatus(c, 'active')">Aktivoi</button>
         <button v-else class="small" @click="setStatus(c, 'paused')">Tauota</button>
         <button v-if="c.status !== 'archived'" class="small" @click="setStatus(c, 'archived')">Arkistoi</button>
+        <button v-if="(c.queued_tasks ?? 0) > 0" class="small danger" @click="clearQueue(c)">Tyhjennä jono</button>
       </td>
     </tr>
   </table>

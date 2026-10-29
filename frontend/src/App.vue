@@ -1,5 +1,7 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { apiGet } from './api/client'
+import type { QueueSummary } from './api/types'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from './stores/auth'
 import { NAV } from './router'
@@ -9,6 +11,17 @@ const route = useRoute()
 const router = useRouter()
 const nav = computed(() => NAV.filter((n) => !n.admin || auth.isAdmin))
 const quick = ref('')
+const badges = ref<Record<string, number>>({})
+let badgeTimer: number | undefined
+async function loadBadges() {
+  if (!auth.me) return
+  try {
+    const q = await apiGet<QueueSummary>('/calls/queue')
+    badges.value = { tehtavat: q.pending_tasks, soita: q.my_callbacks_due }
+  } catch { /* badges are a nicety */ }
+}
+onMounted(() => { loadBadges(); badgeTimer = window.setInterval(loadBadges, 60000) })
+onBeforeUnmount(() => window.clearInterval(badgeTimer))
 
 async function logout() {
   await auth.logout()
@@ -34,6 +47,7 @@ const initials = computed(() => (auth.me?.name ?? '?').split(' ').map((p) => p[0
         <router-link v-for="n in nav" :key="n.path" :to="n.path" :title="n.label">
           <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path :d="n.icon" fill="currentColor" /></svg>
           <span>{{ n.label }}</span>
+          <span v-if="badges[n.name]" class="badge" :title="n.name === 'soita' ? 'erääntyneitä takaisinsoittoja' : 'odottavia tehtäviä'">{{ badges[n.name] }}</span>
         </router-link>
       </nav>
     </aside>
