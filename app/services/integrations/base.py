@@ -190,6 +190,12 @@ class AnalyticsAdapter(Adapter):
             "members_from_register": p.get("from_register"),
             "search_scope": p.get("scope"),
             "search_filters": p.get("filters"),
+            # sequences: which chain, which step kind, how it ended — never the e-mail text
+            "sequence_id": str(p.get("sequence_id")) if p.get("sequence_id") else None,
+            "step_kind": p.get("step_kind"),
+            "step_position": p.get("step_position"),
+            "sent_via": p.get("sent_via"),
+            "finished_reason": p.get("finished_reason"),
         }
         body = {
             "session_id": f"luuri-{p.get('company_id') or event['aggregate_id']}",

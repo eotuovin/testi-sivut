@@ -55,6 +55,15 @@ class Settings(BaseSettings):
     TWENTY_API_KEY: str | None = None
     WEBHOOK_SIGNING_SECRET: str | None = None
 
+    # Sequences: e-mail steps go out over SMTP when configured; otherwise they
+    # wait in the sellers' task inbox and are sent by hand.
+    SMTP_HOST: str | None = None
+    SMTP_PORT: int = 587
+    SMTP_USER: str | None = None
+    SMTP_PASSWORD: str | None = None
+    SMTP_FROM: str | None = None              # e.g. "Muutto365 myynti <myynti@muutto365.fi>"
+    SMTP_STARTTLS: bool = True
+
     # Analytics continuity: sales events are sent to the existing ux_events tracker.
     ANALYTICS_UX_EVENTS_URL: str | None = None  # e.g. https://api.muutto365.fi/api/ux-events
 
@@ -75,7 +84,7 @@ class Settings(BaseSettings):
     @field_validator(
         "BOOTSTRAP_ADMIN_EMAIL", "BOOTSTRAP_ADMIN_PASSWORD", "ANTHROPIC_API_KEY", "BRAVE_SEARCH_API_KEY",
         "MOVINGFIRM_BACKEND_URL", "MOVINGFIRM_INTERNAL_TOKEN", "TWENTY_API_URL",
-        "TWENTY_API_KEY", "WEBHOOK_SIGNING_SECRET", "ANALYTICS_UX_EVENTS_URL",
+        "TWENTY_API_KEY", "WEBHOOK_SIGNING_SECRET", "ANALYTICS_UX_EVENTS_URL", "SMTP_HOST", "SMTP_USER", "SMTP_PASSWORD", "SMTP_FROM",
         "MIRA_AGENT_URL", "MIRA_AGENT_TOKEN", "TELEPHONY_PROVIDER", "TELEPHONY_FROM_NUMBER",
         "ELKS_API_USER", "ELKS_API_PASSWORD", "MIRARUN_URL", "MIRARUN_SESSION_TOKEN",
         "STT_BASE_URL", "STT_API_KEY",
