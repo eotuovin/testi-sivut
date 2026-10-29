@@ -110,6 +110,8 @@ def _fetch_telnyx_recordings(client: httpx.Client) -> int:
                 WHERE s.provider = 'telnyx' AND s.state = 'ended' AND c.recording_consent
                   AND s.answered_at IS NOT NULL AND s.ended_at > now() - interval '2 days' AND s.ended_at < now() - interval '1 minute'
                   AND NOT EXISTS (SELECT 1 FROM call_recordings r WHERE r.session_id = s.id)
+                  AND (s.error IS NULL OR s.error NOT LIKE 'nauhoite%')
+                ORDER BY s.ended_at DESC
                 LIMIT 10
                 """
             )
@@ -130,14 +132,19 @@ def _fetch_telnyx_recordings(client: httpx.Client) -> int:
             continue
         with db_conn() as conn:
             # source keeps its original CHECK ('46elks' | 'upload'); provider says where it really came from
-            conn.execute(
+            inserted = conn.execute(
                 text(
                     "INSERT INTO call_recordings (call_id, session_id, source, provider, provider_recording_id, content_type, audio, audio_bytes, duration_seconds) "
-                    "VALUES (:c, :s, 'upload', 'telnyx', :pid, :ct, :a, :n, :d) ON CONFLICT DO NOTHING"
+                    "VALUES (:c, :s, 'upload', 'telnyx', :pid, :ct, :a, :n, :d) ON CONFLICT DO NOTHING RETURNING id"
                 ),
                 {"c": row["call_id"], "s": row["session_id"], "pid": rec.get("id"), "ct": ctype, "a": audio, "n": len(audio),
                  "d": int(rec["duration_millis"] / 1000) if rec.get("duration_millis") else None},
-            )
+            ).first()
+            if inserted is None:
+                # that Telnyx recording already belongs to another session: note it on the session so it is not retried
+                log.warning("telnyx recording %s already stored; session %s left without audio", rec.get("id"), row["session_id"])
+                conn.execute(text("UPDATE call_sessions SET error = COALESCE(error, 'nauhoite kuului toiseen puheluun') WHERE id=:id"), {"id": row["session_id"]})
+                continue
         done += 1
     return done
 

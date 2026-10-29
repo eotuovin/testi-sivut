@@ -46,8 +46,11 @@ class FakeTelnyx(BaseHTTPRequestHandler):
     def do_GET(self):
         FakeTelnyx.calls.append(("GET", self.path, None))
         if self.path.startswith("/v2/recordings"):
-            if "call_session_id%5D=sess-abc" in self.path or "call_session_id]=sess-abc" in self.path:
-                return self._send(200, {"data": FakeTelnyx.recordings})
+            import urllib.parse
+            q = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+            sid = (q.get("filter[call_session_id]") or [None])[0]
+            if sid:
+                return self._send(200, {"data": [{**r, "id": "rec-" + sid, "call_session_id": sid} for r in FakeTelnyx.recordings]})
             return self._send(200, {"data": []})
         if self.path == "/rec/abc.mp3":
             return self._send(200, AUDIO, "audio/mpeg")
@@ -110,7 +113,8 @@ def test_browser_session_flow_outcome_and_recording(admin_client, telnyx_on):
     sess = r.json()
     assert sess["state"] == "connecting" and sess["agent_number"] == "browser" and sess["customer_number"] == ct["phone_e164"]
 
-    r = admin_client.post(f"/api/telephony/sessions/{sess['id']}/state", json={"state": "in_progress", "provider_session_id": "sess-abc"})
+    tsid = unique("sess")
+    r = admin_client.post(f"/api/telephony/sessions/{sess['id']}/state", json={"state": "in_progress", "provider_session_id": tsid})
     assert r.status_code == 200 and r.json()["answered_at"]
     assert admin_client.post(f"/api/telephony/sessions/{sess['id']}/state", json={"state": "nonsense"}).status_code == 422
     r = admin_client.post(f"/api/telephony/sessions/{sess['id']}/state", json={"state": "ended"})
@@ -125,11 +129,14 @@ def test_browser_session_flow_outcome_and_recording(admin_client, telnyx_on):
     with db_conn() as conn:
         conn.execute(text("UPDATE call_sessions SET ended_at = now() - interval '2 minutes' WHERE id=:id"), {"id": sess["id"]})
     with httpx.Client() as client:
-        assert pipeline.fetch_recordings(client) >= 1
-        pipeline.fetch_recordings(client)  # a second pass must not duplicate
+        # the shared test DB may hold eligible sessions from earlier runs: drain in batches of 10
+        for _ in range(20):
+            if pipeline.fetch_recordings(client) == 0:
+                break
+        assert pipeline.fetch_recordings(client) == 0  # a further pass must not duplicate
     with db_conn() as conn:
         rec = conn.execute(text("SELECT source, provider, provider_recording_id, audio_bytes, duration_seconds, status FROM call_recordings WHERE session_id=:s"), {"s": sess["id"]}).mappings().one()
-    assert rec["provider"] == "telnyx" and rec["source"] == "upload" and rec["provider_recording_id"] == "rec-1"
+    assert rec["provider"] == "telnyx" and rec["source"] == "upload" and rec["provider_recording_id"] == "rec-" + tsid
     assert rec["audio_bytes"] == len(AUDIO) and rec["duration_seconds"] == 83 and rec["status"] == "pending"
 
 
