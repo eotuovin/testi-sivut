@@ -85,10 +85,16 @@ def search_companies(
     name: str | None = None,
     company_form: str | None = None,
     registered_after: str | None = None,
+    registered_before: str | None = None,
     max_results: int = 100,
+    page: int | None = None,
     client: httpx.Client | None = None,
 ) -> tuple[list[RegisterCompany], int]:
-    """Returns (companies, total_matches_in_register)."""
+    """Returns (companies, total_matches_in_register).
+
+    Without `page` the register is read page by page until `max_results` is
+    reached (prospecting runs). With `page` exactly that register page is
+    read (interactive search), at most `max_results` rows of it."""
     params: dict[str, Any] = {}
     if location:
         params["location"] = location
@@ -100,12 +106,15 @@ def search_companies(
         params["companyForm"] = company_form
     if registered_after:
         params["registrationDateStart"] = registered_after
+    if registered_before:
+        params["registrationDateEnd"] = registered_before
     own = client is None
     client = client or httpx.Client(timeout=30.0)
     out: list[RegisterCompany] = []
     total = 0
     try:
-        page = 1
+        single = page is not None
+        page = page or 1
         while len(out) < max_results:
             r = client.get(f"{settings.PRH_API_BASE}/companies", params={**params, "page": page})
             r.raise_for_status()
@@ -120,7 +129,7 @@ def search_companies(
                     out.append(parsed)
                 if len(out) >= max_results:
                     break
-            if len(rows) < 100:
+            if single or len(rows) < 100:
                 break
             page += 1
     finally:

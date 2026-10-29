@@ -1,4 +1,6 @@
 <script setup lang="ts">
+/** End of call: one click on the outcome, then the fields that outcome needs.
+ *  Three groups so the caller never hunts: no lead / follow-up / lead. */
 import { computed, ref, watch } from 'vue'
 import type { CallLog, Contact, Outcome } from '../api/types'
 import { OUTCOME_LABELS } from '../api/types'
@@ -9,12 +11,17 @@ const props = defineProps<{ taskId: string; contacts: Contact[]; contactId: stri
 const consent = ref(false)
 const emit = defineEmits<{ (e: 'submit', body: CallLog): void }>()
 
-const ORDER: Outcome[] = ['no_answer', 'busy', 'voicemail', 'gatekeeper', 'callback', 'not_interested', 'already_customer', 'wrong_number', 'do_not_call', 'booked']
+const GROUPS: { title: string; hint: string; items: Outcome[] }[] = [
+  { title: 'Ei tavoitettu', hint: 'Jää jonoon ja yritetään uudelleen', items: ['no_answer', 'busy', 'voicemail', 'gatekeeper', 'wrong_number'] },
+  { title: 'Jatko', hint: 'Sovittu aika, jolloin palataan', items: ['callback'] },
+  { title: 'Päätös', hint: 'Käsitelty loppuun', items: ['not_interested', 'already_customer', 'do_not_call'] },
+  { title: 'Liidi', hint: 'Tapaaminen sovittu → bookkaus', items: ['booked'] },
+]
 const outcome = ref<Outcome | null>(null)
 const notes = ref(props.initialNotes || '')
 const savedAt = ref<Date | null>(null)
 const saving = ref(false)
-const callbackAt = ref(defaultCallback())
+const callbackAt = ref(defaultCallback(24))
 const booking = ref<BookingDraft>(emptyBooking(props.contacts.find((c) => c.id === props.contactId)?.email ?? null))
 const addContact = ref(false)
 const nc = ref({ name: '', title: '', phone: '', email: '' })
@@ -38,15 +45,25 @@ async function saveDraft() {
   }
 }
 
-function defaultCallback() {
-  const d = new Date(Date.now() + 24 * 3600 * 1000)
-  d.setMinutes(0, 0, 0)
+function defaultCallback(hours: number, atHour?: number) {
+  const d = new Date(Date.now() + hours * 3600 * 1000)
+  if (atHour !== undefined) d.setHours(atHour, 0, 0, 0)
+  else d.setMinutes(0, 0, 0)
+  while (d.getDay() === 0 || d.getDay() === 6) d.setDate(d.getDate() + 1)
   return toLocalInput(d)
 }
 function toLocalInput(d: Date) {
   const pad = (n: number) => String(n).padStart(2, '0')
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
+const CALLBACK_QUICK = [
+  { label: '1 h', value: () => defaultCallback(1) },
+  { label: 'Tänään 15:00', value: () => defaultCallback(0, 15) },
+  { label: 'Huomenna 10', value: () => defaultCallback(24, 10) },
+  { label: '3 pv', value: () => defaultCallback(72, 10) },
+  { label: 'Ensi viikko', value: () => defaultCallback(7 * 24, 10) },
+  { label: '1 kk', value: () => defaultCallback(30 * 24, 10) },
+]
 function pick(o: Outcome) {
   outcome.value = o
   error.value = ''
@@ -83,6 +100,7 @@ function submit() {
   }
   emit('submit', body)
 }
+defineExpose({ notes })
 </script>
 
 <template>
@@ -90,21 +108,28 @@ function submit() {
     <div class="field">
       <label>
         Muistiinpanot puhelun aikana
-        <span class="muted" style="float: right">{{ saving ? 'tallennetaan…' : savedAt ? 'tallennettu ' + savedAt.toLocaleTimeString('fi-FI', { hour: '2-digit', minute: '2-digit' }) : 'tallentuu automaattisesti' }}</span>
+        <span class="muted" style="float: right">{{ saving ? 'tallentuu…' : savedAt ? 'tallennettu ' + savedAt.toLocaleTimeString('fi-FI', { hour: '2-digit', minute: '2-digit' }) : 'tallentuu automaattisesti' }}</span>
       </label>
-      <textarea v-model="notes" style="min-height: 140px" placeholder="Kirjoita tähän sitä mukaa kun puhutte: mitä sanoi, mikä kiinnosti, kuka päättää, milloin kannattaa palata…" />
+      <textarea v-model="notes" style="min-height: 120px" placeholder="Kirjoita sitä mukaa kun puhutte: mitä sanoi, mikä kiinnosti, kuka päättää, milloin kannattaa palata…" />
     </div>
 
-    <h2>Lopputulos</h2>
-    <div class="outcomes">
-      <button v-for="o in ORDER" :key="o" :class="{ selected: outcome === o, primary: o === 'booked' && outcome === o, danger: o === 'do_not_call' && outcome === o }" @click="pick(o)">
-        {{ OUTCOME_LABELS[o] }}
-      </button>
+    <h2>Miten puhelu päättyi?</h2>
+    <div v-for="g in GROUPS" :key="g.title" class="ogroup">
+      <div class="ohead"><strong>{{ g.title }}</strong><span class="muted small"> · {{ g.hint }}</span></div>
+      <div class="outcomes">
+        <button v-for="o in g.items" :key="o" :class="{ selected: outcome === o, primary: o === 'booked', danger: o === 'do_not_call' && outcome === o, lead: o === 'booked' }" @click="pick(o)">
+          {{ OUTCOME_LABELS[o] }}
+        </button>
+      </div>
     </div>
 
-    <div v-if="outcome === 'callback'" class="field" style="margin-top: 0.75rem">
-      <label>Soita uudelleen (aika)</label>
+    <div v-if="outcome === 'callback'" class="card" style="margin-top: 0.75rem">
+      <h3>Milloin soitetaan uudelleen?</h3>
+      <div class="row" style="margin-bottom: 0.5rem">
+        <button v-for="q in CALLBACK_QUICK" :key="q.label" class="small" :class="{ selected: callbackAt === q.value() }" @click="callbackAt = q.value()">{{ q.label }}</button>
+      </div>
       <input v-model="callbackAt" type="datetime-local" />
+      <p class="muted small" style="margin: 0.4rem 0 0">Tehtävä palaa sinun jonoosi tähän aikaan ja näkyy ”Omat takaisinsoitot” -listassa.</p>
     </div>
 
     <BookingFields v-if="outcome === 'booked'" v-model="booking" style="margin-top: 0.75rem" />
@@ -123,6 +148,18 @@ function submit() {
       <label><input type="checkbox" v-model="consent" style="width: auto; margin-right: 0.4rem" />Kerroin asiakkaalle, että puhelu tallennetaan (muuten nauhoitetta ei käsitellä)</label>
     </div>
     <p v-if="error" class="error small">{{ error }}</p>
-    <button class="primary big" :disabled="!canSubmit || busy" @click="submit">Tallenna ja seuraava →</button>
+    <button class="primary big" style="width: 100%; justify-content: center" :disabled="!canSubmit || busy" @click="submit">
+      {{ outcome === 'booked' ? 'Tallenna bookkaus ja seuraava →' : outcome === 'callback' ? 'Tallenna takaisinsoitto ja seuraava →' : 'Tallenna ja seuraava →' }}
+    </button>
   </div>
 </template>
+
+<style scoped>
+.ogroup { margin-bottom: 0.6rem; }
+.ohead { margin-bottom: 0.3rem; font-size: 0.86rem; }
+.outcomes { grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); }
+.outcomes button.lead { grid-column: 1 / -1; padding: 0.9rem; font-size: 1rem; }
+.outcomes button.selected { outline: 2px solid var(--accent); background: var(--accent-soft); color: var(--accent); }
+.outcomes button.primary.selected { color: var(--accent-ink); background: var(--accent); }
+button.small.selected { outline: 2px solid var(--accent); }
+</style>

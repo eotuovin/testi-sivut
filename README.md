@@ -71,7 +71,8 @@ frontend (Vue)  ──/api──▶  app.main (FastAPI)  ──▶  Postgres
 
 `company.created`, `company.updated`, `contact.created`, `call.logged`,
 `booking.created`, `booking.updated`, `prospecting.run_finished`,
-`prospect.approved`.
+`prospect.approved`, `call.analyzed`, `insight.report_created`,
+`list.created`, `list.members_added`, `search.saved`.
 
 Webhook-payload:
 
@@ -114,7 +115,7 @@ muodossa:
 | `actor_type` | `sales_agent` (uusi arvo; sarakkeella ei ole CHECKiä tarkoituksella, ks. backend-migraatio 008) |
 | `interaction_surface` | `luuri` (uusi arvo) |
 | `session_id` | `luuri-{company_id}` |
-| `event_data` | `luuri_event`, `aggregate_id`, `campaign_id`, `company_id`, `outcome`, `duration_seconds`, `booking_status`, `value_eur`, `caller` |
+| `event_data` | `luuri_event`, `aggregate_id`, `campaign_id`, `company_id`, `outcome`, `duration_seconds`, `booking_status`, `value_eur`, `caller`, puheluälystä `analysis_source`, `sentiment`, `interest_level`, `stage_reached`, `objection_categories`, `blocker_categories`, hakupöydästä `list_id`, `list_kind`, `members_added`, `members_from_register`, `search_scope`, `search_filters` (vain suodattimien nimet, ei arvoja) |
 
 Admin-puolella nämä näkyvät `GET /internal/ux-events`-virrassa; funneliin
 lisääminen = uusi vertical `admin.funnel_stages`-migraatiolla (ei tehty tässä).
@@ -237,6 +238,18 @@ prosessit, jotta minuutin agenttivuoro ei pysäytä puhelun tilapäivityksiä.
 
 B2B-kylmäsoitto on Suomessa sallittua; ei-saa-soittaa-lista (`do_not_call`)
 on silti pakollinen ja estää numeron kaikissa yrityksissä.
+
+## Hakupöytä (Haku, Listat)
+
+ZoomInfo-tyylinen työpöytä: `GET /search/companies` yhdistää Luurin omat
+yritykset ja PRH:n avoimen datan yhdeksi listaksi (rekisteriosumat merkitty
+`in_db: false`; suodattimet, joihin rekisteri ei vastaa — tila, koko,
+yhteystiedot, omistaja, lista — rajaavat haun Luurin omiin). `GET
+/search/contacts` hakee tallennetuista yhteyshenkilöistä tittelin, osaston ja
+tason mukaan. Valinnat kerätään listoiksi (`/lists`), joista voi viedä CSV:n
+tai työntää koko listan kampanjan jonoon; rekisteriosumat tallentuvat Luuriin
+vasta kun ne lisätään listaan tai jonoon (`POST /companies/from-register`).
+Tallennetut haut (`/saved-searches`) näkyvät kaikille myyjille.
 
 ## Tietomalli
 
