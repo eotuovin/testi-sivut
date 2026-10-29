@@ -7,6 +7,7 @@ import { apiGet, apiPost, apiPut, errorText } from '../api/client'
 import type { Campaign, Outcome, Sequence, SequenceDetail, SequenceStep, StepKind } from '../api/types'
 import { OUTCOME_LABELS, STEP_LABELS } from '../api/types'
 import { fmtDate, fmtDateTime } from '../format'
+import { SEQUENCE_TEMPLATES, type SequenceTemplate } from '../sequenceTemplates'
 
 const router = useRouter()
 const sequences = ref<Sequence[]>([])
@@ -17,6 +18,7 @@ const form = ref<{ name: string; description: string; campaign_id: string; statu
 const error = ref('')
 const notice = ref('')
 const tab = ref<'steps' | 'enrollments'>('steps')
+const pickingTemplate = ref(false)
 
 const VARS = ['{{etunimi}}', '{{nimi}}', '{{yritys}}', '{{paikkakunta}}', '{{titteli}}', '{{myyja}}', '{{tuote}}']
 const STOPPABLE: Outcome[] = ['booked', 'not_interested', 'do_not_call', 'already_customer', 'callback', 'wrong_number']
@@ -35,16 +37,15 @@ async function show(id: string) {
   open.value = await apiGet<SequenceDetail>(`/sequences/${id}`)
 }
 function startNew() {
+  pickingTemplate.value = true
+}
+function startFromTemplate(t: SequenceTemplate | null) {
+  pickingTemplate.value = false
   open.value = null
   form.value = {
-    name: '', description: '', campaign_id: campaigns.value[0]?.id ?? '', status: 'active',
+    name: t ? t.name : '', description: t?.description ?? '', campaign_id: campaigns.value[0]?.id ?? '', status: 'active',
     stop_on_outcomes: ['booked', 'not_interested', 'do_not_call', 'already_customer'],
-    steps: [
-      { kind: 'email', delay_days: 0, delay_hours: 0, title: 'Hei {{etunimi}} – lyhyt kysymys {{yritys}}:lle', body: 'Hei {{etunimi}},\n\n\n\nTerveisin\n{{myyja}}\nMuutto365' },
-      { kind: 'call', delay_days: 2, delay_hours: 0, title: null, body: null },
-      { kind: 'email', delay_days: 3, delay_hours: 0, title: 'Re: {{yritys}}', body: 'Hei {{etunimi}},\n\nyritin tavoittaa puhelimitse. \n\nTerveisin\n{{myyja}}' },
-      { kind: 'call', delay_days: 4, delay_hours: 0, title: null, body: null },
-    ],
+    steps: t ? t.steps.map((st) => ({ ...st })) : [{ kind: 'email', delay_days: 0, delay_hours: 0, title: '', body: '' }, { kind: 'call', delay_days: 2, delay_hours: 0, title: null, body: null }],
   }
   editing.value = true
 }
@@ -97,6 +98,20 @@ const STATUS: Record<string, string> = { active: 'Käynnissä', finished: 'Valmi
     <div class="row"><button class="small ghost" @click="runNow">Aja erääntyneet nyt</button><button class="primary" @click="startNew">+ Uusi sekvenssi</button></div>
   </div>
   <p v-if="error" class="error">{{ error }}</p>
+
+  <div v-if="pickingTemplate" class="modal" @click.self="pickingTemplate = false">
+    <div class="box" style="width: min(640px, 94vw)">
+      <h2>Mistä aloitetaan?</h2>
+      <p class="muted small">Valitse pohja – kaikki tekstit ja viiveet voi muokata seuraavassa näkymässä.</p>
+      <div v-for="t in SEQUENCE_TEMPLATES" :key="t.id" class="tpl" @click="startFromTemplate(t)">
+        <strong>{{ t.name }}</strong> <span class="muted small">· {{ t.steps.length }} askelta · {{ t.steps.reduce((a, x) => a + x.delay_days, 0) }} pv</span>
+        <div class="small muted">{{ t.description }}</div>
+        <div class="small">{{ t.steps.map((x) => x.kind === 'call' ? '📞' : x.kind === 'email' ? '✉️' : '☑️').join(' → ') }}</div>
+      </div>
+      <div class="tpl" @click="startFromTemplate(null)"><strong>Tyhjästä</strong><div class="small muted">Rakenna itse.</div></div>
+      <div class="row" style="justify-content: flex-end; margin-top: 0.5rem"><button class="ghost" @click="pickingTemplate = false">Peruuta</button></div>
+    </div>
+  </div>
 
   <div class="seqgrid">
     <aside>
@@ -221,5 +236,7 @@ const STATUS: Record<string, string> = { active: 'Käynnissä', finished: 'Valmi
 .flow li .num { position: absolute; left: -13px; top: 0.6rem; }
 .flow li > div { padding-left: 0.6rem; }
 label.check { display: inline-flex; align-items: center; gap: 0.3rem; font-size: 0.84rem; }
+.tpl { border: 1px solid var(--line); border-radius: 8px; padding: 0.6rem 0.8rem; margin-bottom: 0.5rem; cursor: pointer; }
+.tpl:hover { border-color: var(--accent); background: var(--accent-soft); }
 @media (max-width: 900px) { .seqgrid { grid-template-columns: 1fr; } }
 </style>

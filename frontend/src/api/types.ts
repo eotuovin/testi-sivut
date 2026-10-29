@@ -489,3 +489,17 @@ export interface CompanySequence {
   step_count: number
   contact_name: string | null
 }
+
+// ---------------------------------------------------------------- seller-day report
+export interface DayStats {
+  day: string
+  me: string | null
+  per_user: {
+    user_id: string; name: string; calls: number; conversations: number; booked: number; callbacks: number; not_interested: number
+    talk_seconds: number; first_call_at: string | null; last_call_at: string | null; prev_calls: number; prev_booked: number; prev_days: number
+  }[]
+  hourly: { user_id: string; hour: number; calls: number; conversations: number; booked: number }[]
+  outcomes: { user_id: string; outcome: string; n: number }[]
+  bookings: { id: string; user_id: string; company_id: string; company_name: string; product: string; scheduled_at: string | null; value_eur: number | string | null; created_at: string }[]
+  callbacks_due: Record<string, number>
+}

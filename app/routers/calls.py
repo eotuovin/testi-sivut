@@ -460,6 +460,83 @@ def booking_ics(booking_id: UUID, _: Principal = Depends(require_read)):
                     headers={"Content-Disposition": f'attachment; filename="{name}"'})
 
 
+@router.get("/stats/day")
+def stats_day(date: str | None = Query(None, pattern=r"^\d{4}-\d{2}-\d{2}$"), p: Principal = Depends(require_read)):
+    """One seller-day: hour by hour, outcomes, bookings, talk time, and the same
+    figures for the previous 7 days as a baseline. Measured values only."""
+    with db_conn() as conn:
+        day = conn.execute(text("SELECT COALESCE(CAST(:d AS date), (now() AT TIME ZONE 'Europe/Helsinki')::date)"), {"d": date}).scalar_one()
+        per_user = conn.execute(
+            text(
+                """
+                WITH d AS (SELECT CAST(:day AS date) AS day)
+                SELECT u.id AS user_id, u.name,
+                       count(c.id) FILTER (WHERE (c.started_at AT TIME ZONE 'Europe/Helsinki')::date = d.day) AS calls,
+                       count(c.id) FILTER (WHERE (c.started_at AT TIME ZONE 'Europe/Helsinki')::date = d.day AND c.outcome NOT IN ('no_answer','busy','voicemail')) AS conversations,
+                       count(c.id) FILTER (WHERE (c.started_at AT TIME ZONE 'Europe/Helsinki')::date = d.day AND c.outcome='booked') AS booked,
+                       count(c.id) FILTER (WHERE (c.started_at AT TIME ZONE 'Europe/Helsinki')::date = d.day AND c.outcome='callback') AS callbacks,
+                       count(c.id) FILTER (WHERE (c.started_at AT TIME ZONE 'Europe/Helsinki')::date = d.day AND c.outcome='not_interested') AS not_interested,
+                       COALESCE(sum(c.duration_seconds) FILTER (WHERE (c.started_at AT TIME ZONE 'Europe/Helsinki')::date = d.day), 0) AS talk_seconds,
+                       min(c.started_at) FILTER (WHERE (c.started_at AT TIME ZONE 'Europe/Helsinki')::date = d.day) AS first_call_at,
+                       max(c.started_at) FILTER (WHERE (c.started_at AT TIME ZONE 'Europe/Helsinki')::date = d.day) AS last_call_at,
+                       -- baseline: average per active day over the previous 7 days
+                       count(c.id) FILTER (WHERE (c.started_at AT TIME ZONE 'Europe/Helsinki')::date BETWEEN d.day - 7 AND d.day - 1) AS prev_calls,
+                       count(c.id) FILTER (WHERE (c.started_at AT TIME ZONE 'Europe/Helsinki')::date BETWEEN d.day - 7 AND d.day - 1 AND c.outcome='booked') AS prev_booked,
+                       count(DISTINCT (c.started_at AT TIME ZONE 'Europe/Helsinki')::date) FILTER (WHERE (c.started_at AT TIME ZONE 'Europe/Helsinki')::date BETWEEN d.day - 7 AND d.day - 1) AS prev_days
+                FROM users u CROSS JOIN d LEFT JOIN calls c ON c.user_id = u.id AND c.started_at >= (d.day - 7)::timestamp AT TIME ZONE 'Europe/Helsinki'
+                WHERE u.active GROUP BY u.id, u.name, d.day ORDER BY calls DESC, u.name
+                """
+            ),
+            {"day": day},
+        ).mappings().all()
+        hourly = conn.execute(
+            text(
+                """
+                SELECT c.user_id, extract(hour FROM c.started_at AT TIME ZONE 'Europe/Helsinki')::int AS hour,
+                       count(*) AS calls, count(*) FILTER (WHERE c.outcome NOT IN ('no_answer','busy','voicemail')) AS conversations,
+                       count(*) FILTER (WHERE c.outcome='booked') AS booked
+                FROM calls c WHERE (c.started_at AT TIME ZONE 'Europe/Helsinki')::date = CAST(:day AS date)
+                GROUP BY c.user_id, hour ORDER BY hour
+                """
+            ),
+            {"day": day},
+        ).mappings().all()
+        outcomes = conn.execute(
+            text(
+                "SELECT c.user_id, c.outcome, count(*) AS n FROM calls c WHERE (c.started_at AT TIME ZONE 'Europe/Helsinki')::date = CAST(:day AS date) GROUP BY c.user_id, c.outcome"
+            ),
+            {"day": day},
+        ).mappings().all()
+        bookings = conn.execute(
+            text(
+                """
+                SELECT b.id, b.user_id, b.company_id, co.name AS company_name, b.product, b.scheduled_at, b.value_eur, b.created_at
+                FROM sales_bookings b JOIN companies co ON co.id = b.company_id
+                WHERE (b.created_at AT TIME ZONE 'Europe/Helsinki')::date = CAST(:day AS date) ORDER BY b.created_at
+                """
+            ),
+            {"day": day},
+        ).mappings().all()
+        callbacks_due = conn.execute(
+            text(
+                """
+                SELECT t.assigned_to AS user_id, count(*) AS n FROM call_tasks t
+                WHERE t.status = 'callback' AND (t.due_at AT TIME ZONE 'Europe/Helsinki')::date <= CAST(:day AS date) GROUP BY t.assigned_to
+                """
+            ),
+            {"day": day},
+        ).mappings().all()
+    return {
+        "day": day,
+        "per_user": [dict(r) for r in per_user],
+        "hourly": [dict(r) for r in hourly],
+        "outcomes": [dict(r) for r in outcomes],
+        "bookings": [dict(r) for r in bookings],
+        "callbacks_due": {str(r["user_id"]): r["n"] for r in callbacks_due if r["user_id"]},
+        "me": str(p.id) if p.id else None,
+    }
+
+
 @router.get("/stats/overview")
 def stats_overview(days: int = Query(7, ge=1, le=365), _: Principal = Depends(require_read)):
     """Per-caller figures for the last N days. Only measured things: counts from the calls/bookings tables."""

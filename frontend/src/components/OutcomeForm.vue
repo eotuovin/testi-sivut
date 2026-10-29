@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /** End of call: one click on the outcome, then the fields that outcome needs.
  *  Three groups so the caller never hunts: no lead / follow-up / lead. */
-import { computed, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import type { CallLog, Contact, Outcome } from '../api/types'
 import { OUTCOME_LABELS } from '../api/types'
 import { apiPut, errorText } from '../api/client'
@@ -18,6 +18,21 @@ const GROUPS: { title: string; hint: string; items: Outcome[] }[] = [
   { title: 'Liidi', hint: 'Tapaaminen sovittu → bookkaus', items: ['booked'] },
 ]
 const outcome = ref<Outcome | null>(null)
+/** Keyboard: 1–9, 0 pick an outcome in display order; Ctrl/⌘+Enter saves; Esc clears. */
+const ORDER: Outcome[] = GROUPS.flatMap((g) => g.items)
+const KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0']
+const keyFor = (o: Outcome) => KEYS[ORDER.indexOf(o)] ?? ''
+function onKey(e: KeyboardEvent) {
+  const t = e.target as HTMLElement | null
+  const typing = !!t && (t.tagName === 'TEXTAREA' || t.tagName === 'INPUT' || t.tagName === 'SELECT' || t.isContentEditable)
+  if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); if (canSubmit.value && !props.busy) submit(); return }
+  if (typing || e.ctrlKey || e.metaKey || e.altKey) return
+  if (e.key === 'Escape') { outcome.value = null; return }
+  const i = KEYS.indexOf(e.key)
+  if (i >= 0 && ORDER[i]) { e.preventDefault(); pick(ORDER[i]) }
+}
+onMounted(() => window.addEventListener('keydown', onKey))
+onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
 const notes = ref(props.initialNotes || '')
 const savedAt = ref<Date | null>(null)
 const saving = ref(false)
@@ -113,12 +128,12 @@ defineExpose({ notes })
       <textarea v-model="notes" style="min-height: 120px" placeholder="Kirjoita sitä mukaa kun puhutte: mitä sanoi, mikä kiinnosti, kuka päättää, milloin kannattaa palata…" />
     </div>
 
-    <h2>Miten puhelu päättyi?</h2>
+    <h2>Miten puhelu päättyi? <span class="muted small" style="font-weight: 400">· näppäimet 1–0, Ctrl+Enter tallentaa</span></h2>
     <div v-for="g in GROUPS" :key="g.title" class="ogroup">
       <div class="ohead"><strong>{{ g.title }}</strong><span class="muted small"> · {{ g.hint }}</span></div>
       <div class="outcomes">
         <button v-for="o in g.items" :key="o" :class="{ selected: outcome === o, primary: o === 'booked', danger: o === 'do_not_call' && outcome === o, lead: o === 'booked' }" @click="pick(o)">
-          {{ OUTCOME_LABELS[o] }}
+          <kbd>{{ keyFor(o) }}</kbd>{{ OUTCOME_LABELS[o] }}
         </button>
       </div>
     </div>
@@ -159,6 +174,7 @@ defineExpose({ notes })
 .ohead { margin-bottom: 0.3rem; font-size: 0.86rem; }
 .outcomes { grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); }
 .outcomes button.lead { grid-column: 1 / -1; padding: 0.9rem; font-size: 1rem; }
+.outcomes kbd { font: inherit; font-size: 0.7rem; opacity: 0.6; border: 1px solid currentColor; border-radius: 4px; padding: 0 0.3rem; margin-right: 0.45rem; line-height: 1.3; }
 .outcomes button.selected { outline: 2px solid var(--accent); background: var(--accent-soft); color: var(--accent); }
 .outcomes button.primary.selected { color: var(--accent-ink); background: var(--accent); }
 button.small.selected { outline: 2px solid var(--accent); }
