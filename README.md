@@ -10,6 +10,8 @@ järjestelmiin outbox-mallilla.
 Pino: FastAPI + Postgres (SQL-migraatiot, ei ORM) + Vue 3/Pinia. Sama rakenne
 ja samat konventiot kuin movingfirm-backend/-admin.
 
+Myyjän käyttöohje: [`docs/kayttoohje.md`](docs/kayttoohje.md).
+
 ## Mitä se tekee
 
 | Osa | Mitä |

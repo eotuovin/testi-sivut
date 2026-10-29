@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { apiGet, apiPost } from '../api/client'
-import type { Booking, CallLog, Callback, Campaign, Task } from '../api/types'
+import type { Booking, CallLog, Callback, Campaign, QueueSummary, Task } from '../api/types'
 
 export const useCallsStore = defineStore('calls', {
   state: () => ({
@@ -12,6 +12,7 @@ export const useCallsStore = defineStore('calls', {
     callStartedAt: null as number | null,
     callbacks: [] as Callback[],
     lastBooking: null as Booking | null,
+    queue: null as QueueSummary | null,
   }),
   getters: {
     activeCampaigns: (s) => s.campaigns.filter((c) => c.status === 'active'),
@@ -33,6 +34,7 @@ export const useCallsStore = defineStore('calls', {
         this.task = t
         this.queueEmpty = t === null
         this.callStartedAt = null
+        this.loadQueue().catch(() => undefined)
       } finally {
         this.loading = false
       }
@@ -57,6 +59,22 @@ export const useCallsStore = defineStore('calls', {
     },
     async loadCallbacks() {
       this.callbacks = await apiGet<Callback[]>('/calls/callbacks')
+    },
+    async loadQueue() {
+      this.queue = await apiGet<QueueSummary>('/calls/queue', { campaign_id: this.campaignId || undefined })
+    },
+    /** Take one specific task (a callback row, a company page) instead of the next in line. */
+    async claim(taskId: string) {
+      this.loading = true
+      this.lastBooking = null
+      try {
+        if (this.task && this.task.id !== taskId) await this.release()
+        this.task = await apiPost<Task>(`/calls/tasks/${taskId}/claim`)
+        this.queueEmpty = false
+        this.callStartedAt = null
+      } finally {
+        this.loading = false
+      }
     },
   },
 })

@@ -42,6 +42,32 @@ const notice = ref('')
 const selected = ref<Set<string>>(new Set())
 const showList = ref(false)
 const showEnroll = ref(false)
+const filtersCollapsed = ref(window.innerWidth < 1000)
+const bulkStatus = ref('')
+async function applyBulkStatus() {
+  const ids = selectedCompanies.value.filter((h) => h.id).map((h) => h.id as string)
+  if (!ids.length || !bulkStatus.value) return
+  try {
+    const r = await apiPost<{ updated: number }>('/companies/bulk-status', { company_ids: ids, status: bulkStatus.value })
+    notice.value = `${r.updated} yrityksen tila: ${STATUS_LABELS[bulkStatus.value]}`
+    bulkStatus.value = ''
+    selected.value = new Set()
+    await search()
+  } catch (e) { error.value = errorText(e) }
+}
+async function saveRegisterHits() {
+  const reg = selectedCompanies.value.filter((h) => !h.id)
+  if (!reg.length) return
+  try {
+    const r = await apiPost<{ created: number }>('/companies/from-register', { companies: reg.map((h) => ({
+      business_id: h.business_id, name: h.name, company_form: h.company_form, industry_code: h.industry_code, industry_label: h.industry_label,
+      website: h.website, city: h.city, postal_code: h.postal_code, street_address: h.street_address, registration_date: h.registration_date,
+    })) })
+    notice.value = `${r.created} yritystä tallennettu Luuriin`
+    selected.value = new Set()
+    await search()
+  } catch (e) { error.value = errorText(e) }
+}
 const showSave = ref(false)
 const saveName = ref('')
 const enqueueCampaign = ref('')
@@ -221,10 +247,13 @@ function fmtRev(v: number | string | null) { if (v === null) return '—'; const
 
   <div class="desk">
     <!-- ------------------------------------------------ filter rail -->
-    <aside class="filters">
+    <aside class="filters" :class="{ collapsed: filtersCollapsed }">
       <div class="fhead">
         <span>Suodattimet <span v-if="activeFilterCount" class="tag accent">{{ activeFilterCount }}</span></span>
-        <button class="ghost small" @click="reset">Tyhjennä</button>
+        <span class="row" style="gap: 0.3rem">
+          <button class="ghost small" @click="reset">Tyhjennä</button>
+          <button class="ghost small toggle" @click="filtersCollapsed = !filtersCollapsed">{{ filtersCollapsed ? 'Näytä' : 'Piilota' }}</button>
+        </span>
       </div>
       <details open>
         <summary>{{ scope === 'company' ? 'Yrityksen nimi' : 'Henkilön nimi' }}</summary>
@@ -331,6 +360,11 @@ function fmtRev(v: number | string | null) { if (v === null) return '—'; const
           <CampaignPicker v-model="enqueueCampaign" />
           <button class="small primary" :disabled="!enqueueCampaign || enqueueCampaign === '__new'" @click="enqueue">Lisää jonoon</button>
           <button class="small" @click="exportCsv">Vie CSV</button>
+          <template v-if="scope === 'company'">
+            <select v-model="bulkStatus" class="small" style="width:auto"><option value="">Merkitse tila…</option><option v-for="(l, k) in STATUS_LABELS" :key="k" :value="k">{{ l }}</option></select>
+            <button class="small" :disabled="!bulkStatus" @click="applyBulkStatus">OK</button>
+            <button v-if="selectedCompanies.some((h) => !h.id)" class="small" @click="saveRegisterHits">Tallenna Luuriin ({{ selectedCompanies.filter((h) => !h.id).length }})</button>
+          </template>
           <button class="ghost small" @click="selected = new Set()">Tyhjennä valinta</button>
         </template>
         <template v-else>

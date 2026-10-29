@@ -203,6 +203,10 @@ export interface Campaign {
   retry_after_minutes: number
   open_tasks?: number
   done_tasks?: number
+  queued_tasks?: number
+  callback_tasks?: number
+  skipped_tasks?: number
+  in_progress_tasks?: number
   bookings?: number
 }
 
@@ -502,4 +506,15 @@ export interface DayStats {
   outcomes: { user_id: string; outcome: string; n: number }[]
   bookings: { id: string; user_id: string; company_id: string; company_name: string; product: string; scheduled_at: string | null; value_eur: number | string | null; created_at: string }[]
   callbacks_due: Record<string, number>
+}
+
+export interface QueueSummary {
+  due_now: number
+  waiting: number
+  callbacks: number
+  callbacks_due: number
+  my_callbacks_due: number
+  in_progress: number
+  done: number
+  pending_tasks: number
 }

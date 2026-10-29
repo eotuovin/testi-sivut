@@ -40,6 +40,10 @@ def list_campaigns(_: Principal = Depends(require_read)):
                 SELECT c.*,
                   (SELECT count(*) FROM call_tasks t WHERE t.campaign_id=c.id AND t.status IN ('queued','callback')) AS open_tasks,
                   (SELECT count(*) FROM call_tasks t WHERE t.campaign_id=c.id AND t.status='done') AS done_tasks,
+                  (SELECT count(*) FROM call_tasks t WHERE t.campaign_id=c.id AND t.status='queued') AS queued_tasks,
+                  (SELECT count(*) FROM call_tasks t WHERE t.campaign_id=c.id AND t.status='callback') AS callback_tasks,
+                  (SELECT count(*) FROM call_tasks t WHERE t.campaign_id=c.id AND t.status='skipped') AS skipped_tasks,
+                  (SELECT count(*) FROM call_tasks t WHERE t.campaign_id=c.id AND t.status='in_progress') AS in_progress_tasks,
                   (SELECT count(*) FROM sales_bookings b WHERE b.campaign_id=c.id AND b.status <> 'cancelled') AS bookings
                 FROM campaigns c ORDER BY c.created_at DESC
                 """
@@ -90,6 +94,16 @@ class EnqueueIn(BaseModel):
     status: str | None = Field(default=None, description="enqueue every company with this status")
     city: str | None = None
     priority: int = 0
+
+
+@router.post("/campaigns/{campaign_id}/clear-queue")
+def clear_queue(campaign_id: UUID, _: Principal = Depends(require_admin)):
+    """Skip every queued task of a campaign (callbacks and leased tasks are kept)."""
+    with db_conn() as conn:
+        if conn.execute(text("SELECT 1 FROM campaigns WHERE id=:id"), {"id": campaign_id}).first() is None:
+            raise HTTPException(status_code=404, detail="campaign not found")
+        res = conn.execute(text("UPDATE call_tasks SET status='skipped' WHERE campaign_id=:id AND status='queued'"), {"id": campaign_id})
+    return {"skipped": res.rowcount}
 
 
 @router.post("/campaigns/{campaign_id}/enqueue")
