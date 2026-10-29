@@ -13,10 +13,12 @@ import OutcomeForm from '../components/OutcomeForm.vue'
 import DialPanel from '../components/DialPanel.vue'
 import CompanyLogo from '../components/CompanyLogo.vue'
 import { useTelephonyStore } from '../stores/telephony'
+import { useAuthStore } from '../stores/auth'
 import { fmtDateTime } from '../format'
 
 const store = useCallsStore()
 const tel = useTelephonyStore()
+const auth = useAuthStore()
 const route = useRoute()
 const router = useRouter()
 const intel = ref<{ recording_enabled: boolean } | null>(null)
@@ -58,6 +60,16 @@ const elapsed = computed(() => {
   if (!store.callStartedAt) return null
   const s = Math.floor((now.value - store.callStartedAt) / 1000)
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
+})
+/** Script with {{etunimi}} {{nimi}} {{yritys}} {{paikkakunta}} {{myyja}} {{tuote}} filled in for this call. */
+const script = computed(() => {
+  const t = store.task
+  if (!t?.script) return ''
+  const name = contact.value?.name ?? ''
+  const vars: Record<string, string> = {
+    etunimi: name.split(' ')[0] || '', nimi: name, yritys: t.company_name, paikkakunta: t.city ?? '', myyja: (auth.me?.name ?? '').split(' ')[0], tuote: t.product ?? '',
+  }
+  return t.script.replace(/\{\{(\w+)\}\}/g, (m, k) => (k in vars ? vars[k] || m : m))
 })
 const site = computed(() => store.task?.website ? (store.task.website.startsWith('http') ? store.task.website : 'https://' + store.task.website) : null)
 
@@ -290,7 +302,7 @@ async function verify(c: Contact) {
       </div>
       <div v-if="store.task.script" class="card">
         <h2>Spiikki · {{ store.task.product }}</h2>
-        <div class="script">{{ store.task.script }}</div>
+        <div class="script">{{ script }}</div>
       </div>
     </section>
 

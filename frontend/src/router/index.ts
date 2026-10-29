@@ -3,6 +3,7 @@ import { useAuthStore } from '../stores/auth'
 
 /** Main navigation (left rail). `icon` is a small inline SVG path. */
 export const NAV = [
+  { path: '/tanaan', name: 'tanaan', label: 'Tänään', icon: 'M12 3 2 12h3v8h5v-5h4v5h5v-8h3z', component: () => import('../views/HomeView.vue') },
   { path: '/haku', name: 'haku', label: 'Haku', icon: 'M10 2a8 8 0 1 0 4.9 14.3l5.4 5.4 1.4-1.4-5.4-5.4A8 8 0 0 0 10 2zm0 2a6 6 0 1 1 0 12 6 6 0 0 1 0-12z', component: () => import('../views/SearchView.vue') },
   { path: '/listat', name: 'listat', label: 'Listat', icon: 'M4 5h16v2H4zm0 6h16v2H4zm0 6h10v2H4z', component: () => import('../views/ListsView.vue') },
   { path: '/soita', name: 'soita', label: 'Soita', icon: 'M6.6 10.8a15 15 0 0 0 6.6 6.6l2.2-2.2a1 1 0 0 1 1-.25 11.4 11.4 0 0 0 3.6.6 1 1 0 0 1 1 1V20a1 1 0 0 1-1 1A17 17 0 0 1 3 4a1 1 0 0 1 1-1h3.5a1 1 0 0 1 1 1 11.4 11.4 0 0 0 .6 3.6 1 1 0 0 1-.25 1z', component: () => import('../views/CallView.vue') },
@@ -20,7 +21,7 @@ export const NAV = [
 const router = createRouter({
   history: createWebHistory(),
   routes: [
-    { path: '/', redirect: '/haku' },
+    { path: '/', redirect: '/tanaan' },
     { path: '/login', name: 'login', component: () => import('../views/LoginView.vue'), meta: { public: true } },
     { path: '/yritykset', redirect: '/haku' },
     { path: '/yritykset/:id', name: 'yritys', component: () => import('../views/CompanyDetailView.vue') },
@@ -34,7 +35,7 @@ router.beforeEach(async (to) => {
   if (!auth.loaded) await auth.load()
   if (to.meta.public) return true
   if (!auth.me) return { name: 'login', query: { next: to.fullPath } }
-  if (to.meta.admin && !auth.isAdmin) return { name: 'haku' }
+  if (to.meta.admin && !auth.isAdmin) return { name: 'tanaan' }
   return true
 })
 

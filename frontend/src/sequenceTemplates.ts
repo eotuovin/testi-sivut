@@ -14,6 +14,19 @@ const sig = '\n\nTerveisin\n{{myyja}}\nMuutto365'
 
 export const SEQUENCE_TEMPLATES: SequenceTemplate[] = [
   {
+    id: 'avora',
+    name: 'Avora – uudet yritykset',
+    description: 'Vasta perustetuille osakeyhtiöille. Soitto ensin, lyhyet meilit ihmiseltä ihmiselle, ei tarjouksia. 20 päivää.',
+    steps: [
+      { kind: 'call', delay_days: 0, delay_hours: 0, title: null, body: null },
+      { kind: 'email', delay_days: 1, delay_hours: 0, title: 'Soittelin – yksi asia', body: 'Hei {{etunimi}},\n\nyritin tavoittaa puhelimella, osuin varmaan kiireeseen. Asia lyhyesti: autetaan uusia yrityksiä {{paikkakunta}}ssa saamaan varaukset, asiakastiedot ja laskutus yhteen paikkaan – ja laitetaan se pystyyn teidän puolesta.\n\nSoitan torstaina uudestaan. Jos ajankohta on huono, vastaa vaan "ei nyt", niin en häiritse.\n\n{{myyja}}\nMuutto365 / Avora' },
+      { kind: 'call', delay_days: 3, delay_hours: 0, title: null, body: null },
+      { kind: 'email', delay_days: 4, delay_hours: 0, title: 'Miltä se näyttäis {{yritys}}lla', body: 'Hei {{etunimi}},\n\nettä tiedät mistä puhun: 15 minuutissa näytän Teamsissa, miten asiakas varaa ajan teidän sivulta, miten se menee kalenteriin ja asiakasrekisteriin ilman että kukaan kirjoittaa mitään käsin. Jos siinä ei ole järkeä teille, sanot sen ja asia on sillä selvä.\n\nEhdota aikaa, tai soitan ensi viikolla.\n\n{{myyja}}' },
+      { kind: 'call', delay_days: 5, delay_hours: 0, title: null, body: null },
+      { kind: 'task', delay_days: 7, delay_hours: 0, title: 'LinkedIn / Facebook: {{nimi}}, {{yritys}}', body: 'Lähetä LinkedIn-yhteyspyyntö ilman saatetekstiä, tai seuraa yrityksen Facebook-sivua. Ei viestiä. Palataan puhelimella 1–2 kk päästä (Soita uudelleen).' },
+    ],
+  },
+  {
     id: 'yleinen',
     name: 'Yleinen B2B-esittely',
     description: 'Lyhyt meili, soitto, muistutus, toinen soitto, LinkedIn. 10 päivää.',
