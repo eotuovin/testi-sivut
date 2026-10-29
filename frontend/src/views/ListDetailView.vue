@@ -6,6 +6,7 @@ import type { Campaign, ListDetail } from '../api/types'
 import { STATUS_LABELS } from '../api/types'
 import { fmtDate, fmtDateTime } from '../format'
 import CompanyLogo from '../components/CompanyLogo.vue'
+import CampaignPicker from '../components/CampaignPicker.vue'
 import EnrollModal from '../components/EnrollModal.vue'
 
 const route = useRoute()
@@ -64,8 +65,8 @@ const withPhone = computed(() => list.value?.members.filter((m) => m.phone_e164 
       <div class="row">
         <button class="small" @click="router.push({ path: '/haku', query: { list_id: list.id } })">Avaa haussa</button>
         <a class="btn small" :href="`/api/lists/${list.id}/export.csv`">Vie CSV</a>
-        <select v-model="campaign" style="width:auto"><option value="">Soittojonoon…</option><option v-for="c in campaigns" :key="c.id" :value="c.id">{{ c.name }}</option></select>
-        <button class="primary small" :disabled="!campaign" @click="enqueue">Lisää koko lista jonoon</button>
+        <CampaignPicker v-model="campaign" :suggested-name="list.name" />
+        <button class="primary small" :disabled="!campaign || campaign === '__new'" @click="enqueue">Lisää koko lista jonoon</button>
         <button class="small" @click="showEnroll = true">Koko lista sekvenssiin</button>
       </div>
     </div>
