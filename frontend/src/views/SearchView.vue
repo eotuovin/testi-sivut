@@ -27,7 +27,7 @@ const f = reactive({
   employees_min: '', employees_max: '', revenue_min: '', revenue_max: '',
   has_phone: false, has_email: false, not_called: false, owner_id: '', list_id: '', include_register: true,
   // people
-  title: '', department: '', management_level: '', exclude_dnc: true,
+  person: '', title: '', department: '', management_level: '', exclude_dnc: true,
 })
 const page = ref(1)
 const companies = ref<CompanySearchResult | null>(null)
@@ -89,7 +89,14 @@ function params(): Record<string, unknown> {
   const p: Record<string, unknown> = {}
   for (const [k, v] of Object.entries(f)) if (v !== '' && v !== false && v !== null) p[k] = v
   if (scope.value === 'company') { p.page = page.value; delete p.title; delete p.department; delete p.management_level; delete p.exclude_dnc }
-  else { delete p.include_register; delete p.not_called; delete p.registered_after; delete p.registered_before; delete p.employees_min; delete p.employees_max; delete p.revenue_min; delete p.revenue_max; delete p.status; delete p.owner_id; if (f.exclude_dnc) p.exclude_dnc = true; else p.exclude_dnc = false; if (p.q) { p.company = f.q; delete p.q } }
+  else {
+    delete p.include_register; delete p.not_called; delete p.registered_after; delete p.registered_before; delete p.employees_min; delete p.employees_max; delete p.revenue_min; delete p.revenue_max; delete p.status; delete p.owner_id
+    p.exclude_dnc = !!f.exclude_dnc
+    if (p.q) { p.company = f.q; delete p.q }
+    if (f.person) p.q = f.person
+    delete p.person
+  }
+  if (scope.value === 'company') delete p.person
   return p
 }
 
@@ -260,6 +267,7 @@ function fmtRev(v: number | string | null) { if (v === null) return '—'; const
         <div class="fbody">
           <input v-if="scope === 'company'" v-model="f.q" placeholder="Nimi tai Y-tunnus" />
           <template v-else>
+            <input v-model="f.person" placeholder="Henkilön nimi" />
             <input v-model="f.q" placeholder="Yritys tai Y-tunnus" />
           </template>
         </div>

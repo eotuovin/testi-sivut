@@ -42,7 +42,7 @@ const initials = computed(() => (auth.me?.name ?? '?').split(' ').map((p) => p[0
   </div>
   <div v-else class="shell">
     <aside class="rail">
-      <router-link to="/haku" class="brand" title="Luuri"><span class="mark">L</span><span class="word">Luuri</span></router-link>
+      <router-link to="/tanaan" class="brand" title="Luuri"><span class="mark">L</span><span class="word">Luuri</span></router-link>
       <nav>
         <router-link v-for="n in nav" :key="n.path" :to="n.path" :title="n.label">
           <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path :d="n.icon" fill="currentColor" /></svg>

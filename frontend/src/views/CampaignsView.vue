@@ -16,8 +16,35 @@ async function load() {
 }
 onMounted(load)
 
+const AVORA_SCRIPT = `AVAUS (rauhallisesti, kuin tutulle)
+"Moi, {{myyja}} täällä Jyväskylästä. ... Onko {{etunimi}} puhelimessa?"
+"Mä soitan täysin kylmää puhelua, me ei olla ikinä juteltu. Saanko kertoa parillakymmenellä sekunnilla miks soitin, ja sä päätät sitten jatketaanko?"
+
+SYY SOITTOON (yksi lause)
+"Huomasin että {{yritys}} on perustettu hiljattain, ja tässä vaiheessa moni pyörittää varauksia, asiakastietoja ja laskutusta vähän siellä täällä – WhatsApp, kalenteri, Excel. Me tehdään täällä Jyväskylässä sitä, että ne laitetaan yhteen paikkaan ja pystytetään asiakkaan puolesta."
+
+YKSI KYSYMYS – ja sitten hiljaa
+"Mitä sä tällä hetkellä käytät, kun asiakas haluaa varata ajan tai pyytää tarjouksen?"
+
+PEILAUS (asiakkaan omat sanat takaisin)
+"Eli ... ja ... Kuulostaa siltä että se toimii, mutta vie sun aikaa."
+
+PYYNTÖ (pieni, kaksi aikaa)
+"Mä en osaa vielä sanoa sopiiko tää teille. Otetaan 15 minuuttia Teamsissa, mä näytän miltä se näyttäis just teidän varauksilla, ja sä sanot suoraan onko siinä järkeä. Sopisko torstaina aamupäivästä vai iltapäivästä?"
+
+VAHVISTUS
+"Laitan kalenterikutsun. Ei tarvitse asentaa mitään. Jos tulee este, vastaa kutsuun niin siirretään."
+
+JOS "EI KIINNOSTA": "Selvä, kiitos että sanoit suoraan. Onko se niin että homma toimii jo, vai että ajankohta on huono?"
+HINTA JOS KYSYY: "149 €/kk ja käyttöönotto 990 € kerran – siihen kuuluu että me laitetaan se pystyyn."
+
+ÄLÄ: kysy "onko hetki", nosta ääntä, puhu päälle, väitä vastaan, sano "loistava".`
+
 function startNew() {
   editing.value = { name: '', product: '', script: '', recording_notice: 'Tämä puhelu tallennetaan palvelun kehittämistä varten.', max_attempts: 4, retry_after_minutes: 240 }
+}
+function startAvora() {
+  editing.value = { name: 'Avora – ensikontakti', product: 'Avora Kasvu (149 €/kk)', script: AVORA_SCRIPT, recording_notice: 'Tämä puhelu tallennetaan palvelun kehittämistä varten.', max_attempts: 3, retry_after_minutes: 1440 }
 }
 async function save() {
   if (!editing.value) return
@@ -47,7 +74,7 @@ async function setStatus(c: Campaign, status: string) {
   <h1>Kampanjat</h1>
   <p class="muted small">Kampanja = mitä myydään + spiikki + soittosäännöt. Yritykset lisätään kampanjan jonoon Hausta, listalta, sekvenssistä tai Agentin ehdotuksista.</p>
   <p v-if="error" class="error">{{ error }}</p>
-  <button class="primary" style="margin-bottom: 1rem" @click="startNew">+ Uusi kampanja</button>
+  <div class="row" style="margin-bottom: 1rem"><button class="primary" @click="startNew">+ Uusi kampanja</button><button @click="startAvora">+ Avora-kampanja (valmis spiikki)</button></div>
 
   <div v-if="editing" class="card">
     <h2>{{ editing.id ? 'Muokkaa' : 'Uusi kampanja' }}</h2>

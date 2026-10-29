@@ -4,6 +4,12 @@ Luuri on Muutto365:n soittotyökalu: löydät yritykset, soitat, kirjaat
 lopputuloksen ja bookkaat tapaamiset. Osoite VPN:ssä: http://10.8.0.4:6770.
 Kirjaudu omalla sähköpostilla ja salasanalla.
 
+## Tänään-sivu
+
+Kirjautumisen jälkeen avautuu **Tänään**: erääntyneet takaisinsoitot, jonon
+koko, odottavat tehtävät, päivän luvut ja tulevat tapaamiset. Iso punainen
+nappi vie soittamaan. Takaisinsoiton tai tapaamisen klikkaus avaa sen suoraan.
+
 ## Päivän kulku lyhyesti
 
 1. **Soita** → *Anna seuraava* → puhelin näyttää yrityksen, henkilön ja numeron.
@@ -13,6 +19,11 @@ Kirjaudu omalla sähköpostilla ja salasanalla.
 5. Jos sovit tapaamisen: **Bookattu!** → täytä aika ja paikka → se menee Bookkauksiin.
 
 Jonon loputtua: lisää yrityksiä Hausta, listalta tai Agentista.
+
+Spiikissä voi käyttää muuttujia `{{etunimi}}`, `{{nimi}}`, `{{yritys}}`,
+`{{paikkakunta}}`, `{{myyja}}`, `{{tuote}}` – Soita-näkymä täyttää ne
+asiakkaan tiedoilla. Kampanjat-sivulla on valmis **Avora-kampanja**
+spiikkeineen.
 
 ## Haku
 
