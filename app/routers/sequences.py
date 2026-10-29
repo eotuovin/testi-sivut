@@ -99,7 +99,8 @@ def create_sequence(body: SequenceIn, p: Principal = Depends(require_user)):
 
 @router.get("/sequences/inbox")
 def inbox(status: str = "pending", mine: bool = False, limit: int = Query(200, le=1000), p: Principal = Depends(require_read)):
-    """The seller's to-do list: e-mails to send by hand and tasks, due first."""
+    """The seller's to-do list: e-mails to send by hand and tasks, due first.
+    status=open shows pending and failed (a failed e-mail step needs a person: add the address, send by hand)."""
     with db_conn() as conn:
         rows = conn.execute(
             text(
@@ -113,7 +114,7 @@ def inbox(status: str = "pending", mine: bool = False, limit: int = Query(200, l
                 JOIN companies co ON co.id = e.company_id
                 LEFT JOIN contacts ct ON ct.id = e.contact_id
                 LEFT JOIN users u ON u.id = e.started_by
-                WHERE (:st = 'all' OR a.status = :st) AND a.kind <> 'call'
+                WHERE (:st = 'all' OR a.status = :st OR (:st = 'open' AND a.status IN ('pending', 'failed'))) AND a.kind <> 'call'
                   AND (NOT :mine OR e.started_by = :uid)
                 ORDER BY a.due_at LIMIT :limit
                 """
@@ -134,7 +135,7 @@ def action_done(action_id: UUID, body: ActionDone, p: Principal = Depends(requir
             text(
                 """
                 UPDATE sequence_actions SET status=:st, done_at=now(), done_by=:u, sent_via=CASE WHEN kind='email' AND :st='done' THEN COALESCE(sent_via, 'manual') ELSE sent_via END
-                WHERE id=:id AND status='pending' RETURNING id, kind, position, enrollment_id, sent_via
+                WHERE id=:id AND (status='pending' OR (status='failed' AND :st='skipped')) RETURNING id, kind, position, enrollment_id, sent_via
                 """
             ),
             {"st": body.status, "u": p.id, "id": action_id},

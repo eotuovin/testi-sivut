@@ -6,6 +6,7 @@ import type { Campaign, ListDetail } from '../api/types'
 import { STATUS_LABELS } from '../api/types'
 import { fmtDate, fmtDateTime } from '../format'
 import CompanyLogo from '../components/CompanyLogo.vue'
+import EnrollModal from '../components/EnrollModal.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -15,6 +16,7 @@ const error = ref('')
 const notice = ref('')
 const campaign = ref('')
 const editing = ref(false)
+const showEnroll = ref(false)
 const name = ref('')
 
 async function load() {
@@ -64,9 +66,11 @@ const withPhone = computed(() => list.value?.members.filter((m) => m.phone_e164 
         <a class="btn small" :href="`/api/lists/${list.id}/export.csv`">Vie CSV</a>
         <select v-model="campaign" style="width:auto"><option value="">Soittojonoon…</option><option v-for="c in campaigns" :key="c.id" :value="c.id">{{ c.name }}</option></select>
         <button class="primary small" :disabled="!campaign" @click="enqueue">Lisää koko lista jonoon</button>
+        <button class="small" @click="showEnroll = true">Koko lista sekvenssiin</button>
       </div>
     </div>
     <p v-if="notice" class="tag ok">{{ notice }}</p>
+    <EnrollModal v-if="showEnroll" :list-id="list.id" @close="showEnroll = false" @enrolled="(r) => { showEnroll = false; notice = `${r.enrolled} lisätty ketjuun ”${r.sequence.name}”` }" />
 
     <div v-if="!list.members.length" class="empty">Lista on tyhjä. Rastita hakutuloksia ja lisää ne tähän listaan.</div>
     <div v-else class="table-wrap">
