@@ -14,6 +14,12 @@ class Settings(BaseSettings):
     SESSION_TTL_HOURS: int = 12
     BOOTSTRAP_ADMIN_EMAIL: str | None = None
     BOOTSTRAP_ADMIN_PASSWORD: str | None = None
+    # An API key for another of our services (the Avora website's demo-request
+    # form), installed at startup with the "write" scope so it can create a
+    # company + contact. The value is generated and placed by miradeploy; it
+    # never goes through a person. Changing it deactivates the old key.
+    INBOUND_API_KEY: str | None = None
+    INBOUND_API_KEY_NAME: str = "avora-sivu"
 
     # Prospecting
     PRH_API_BASE: str = "https://avoindata.prh.fi/opendata-ytj-api/v3"
@@ -87,7 +93,7 @@ class Settings(BaseSettings):
     TELEPHONY_RECORDING_WEBHOOK: str = "https://luuri.invalid/recording"  # placeholder, see elks.py
 
     @field_validator(
-        "BOOTSTRAP_ADMIN_EMAIL", "BOOTSTRAP_ADMIN_PASSWORD", "ANTHROPIC_API_KEY", "BRAVE_SEARCH_API_KEY",
+        "BOOTSTRAP_ADMIN_EMAIL", "BOOTSTRAP_ADMIN_PASSWORD", "INBOUND_API_KEY", "ANTHROPIC_API_KEY", "BRAVE_SEARCH_API_KEY",
         "MOVINGFIRM_BACKEND_URL", "MOVINGFIRM_INTERNAL_TOKEN", "TWENTY_API_URL",
         "TWENTY_API_KEY", "WEBHOOK_SIGNING_SECRET", "ANALYTICS_UX_EVENTS_URL", "SMTP_HOST", "SMTP_USER", "SMTP_PASSWORD", "SMTP_FROM",
         "MIRA_AGENT_URL", "MIRA_AGENT_TOKEN", "TELEPHONY_PROVIDER", "TELEPHONY_FROM_NUMBER",

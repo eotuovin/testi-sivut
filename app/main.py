@@ -6,7 +6,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
 
-from app.auth import hash_password
+from app.auth import hash_api_key, hash_password
 from app.config import settings
 from app.db import db_conn
 from app.routers import calls, campaigns, companies, integrations, intelligence, lists, prospecting, search, sequences, session, telephony
@@ -40,9 +40,37 @@ def bootstrap_admin() -> None:
         logging.getLogger(__name__).info("bootstrap admin created: %s", settings.BOOTSTRAP_ADMIN_EMAIL)
 
 
+def bootstrap_inbound_api_key() -> None:
+    """Install INBOUND_API_KEY as an active "write" key named INBOUND_API_KEY_NAME.
+
+    Idempotent across restarts. When the value changes, the previous key under
+    the same name is deactivated, so rotating the env var revokes the old one."""
+    plain = settings.INBOUND_API_KEY
+    if not plain:
+        return
+    name = settings.INBOUND_API_KEY_NAME
+    key_hash = hash_api_key(plain)
+    with db_conn() as conn:
+        conn.execute(
+            text("UPDATE api_keys SET active = false WHERE name = :n AND key_hash <> :h AND active"),
+            {"n": name, "h": key_hash},
+        )
+        updated = conn.execute(
+            text("UPDATE api_keys SET active = true, scopes = ARRAY['write'] WHERE key_hash = :h RETURNING id"),
+            {"h": key_hash},
+        ).first()
+        if updated is None:
+            conn.execute(
+                text("INSERT INTO api_keys (name, key_hash, scopes) VALUES (:n, :h, ARRAY['write'])"),
+                {"n": name, "h": key_hash},
+            )
+            logging.getLogger(__name__).info("inbound api key installed: %s", name)
+
+
 @app.on_event("startup")
 def _startup():
     bootstrap_admin()
+    bootstrap_inbound_api_key()
 
 
 # Built frontend (frontend/dist) is served by the same process in production.
