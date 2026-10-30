@@ -91,7 +91,7 @@ function dayLabel(iso: string) {
         <h2>Tehtävät</h2>
         <div v-if="!tasks.length" class="muted small">Ei odottavia tehtäviä.</div>
         <div v-for="t in tasks.slice(0, 6)" :key="t.id" class="row item" @click="router.push('/tehtavat')">
-          <span class="when">{{ t.kind === 'email' ? '✉️' : '☑️' }}</span>
+          <span class="when">{{ t.kind === 'email' ? 'Sähköposti' : 'Tehtävä' }}</span>
           <span style="flex: 1"><strong>{{ t.company_name }}</strong><span class="muted small"> · {{ t.subject || t.kind }}</span></span>
           <span v-if="t.status === 'failed'" class="tag danger">virhe</span>
         </div>
