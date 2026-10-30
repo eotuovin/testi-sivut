@@ -42,10 +42,7 @@ async function submit() {
 </template>
 
 <style scoped>
-.login { min-height: 100vh; display: grid; place-items: center; background: #08090A; padding: 1rem; position: relative; overflow: hidden; }
-.login::before { content: ''; position: absolute; left: 50%; top: 38%; width: 900px; height: 420px; transform: translate(-50%, -50%); background: radial-gradient(50% 50% at 50% 50%, rgba(142,162,255,.14), rgba(142,162,255,0) 70%); pointer-events: none; }
-.login .card { position: relative; width: min(400px, 100%); margin: 0; padding: 1.8rem 1.8rem 1.6rem; border-radius: 16px; background: #0F1013; }
-.login h1 { font-size: 1.6rem; }
-.login button.primary { width: 100%; justify-content: center; height: 44px; margin-top: 0.3rem; }
-.logo-mark { width: 34px; height: 34px; border-radius: 9px; background: var(--accent); color: var(--accent-ink); display: grid; place-items: center; font-weight: 800; font-size: 1.1rem; }
+.login { min-height: 100vh; display: grid; place-items: center; background: linear-gradient(160deg, var(--navy) 0%, var(--navy-2) 60%, #22345f 100%); padding: 1rem; }
+.login .card { width: min(380px, 100%); margin: 0; padding: 1.5rem 1.6rem; }
+.logo-mark { width: 34px; height: 34px; border-radius: 8px; background: var(--accent); color: #fff; display: grid; place-items: center; font-weight: 800; font-size: 1.1rem; }
 </style>

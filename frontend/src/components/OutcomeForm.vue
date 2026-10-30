@@ -173,10 +173,9 @@ defineExpose({ notes })
 .ogroup { margin-bottom: 0.6rem; }
 .ohead { margin-bottom: 0.3rem; font-size: 0.86rem; }
 .outcomes { grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); }
-.outcomes button.lead { grid-column: 1 / -1; padding: 0.9rem; font-size: 1rem; background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
-.outcomes button.lead:hover { background: #A3B3FF; border-color: #A3B3FF; }
+.outcomes button.lead { grid-column: 1 / -1; padding: 0.9rem; font-size: 1rem; }
 .outcomes kbd { font: inherit; font-size: 0.7rem; opacity: 0.6; border: 1px solid currentColor; border-radius: 4px; padding: 0 0.3rem; margin-right: 0.45rem; line-height: 1.3; }
-.outcomes button.selected { outline: 0; border-color: var(--accent); background: var(--accent-soft); color: #FFFFFF; }
-.outcomes button.primary.selected { color: var(--accent-ink); background: #FFFFFF; border-color: #FFFFFF; }
+.outcomes button.selected { outline: 2px solid var(--accent); background: var(--accent-soft); color: var(--accent); }
+.outcomes button.primary.selected { color: var(--accent-ink); background: var(--accent); }
 button.small.selected { outline: 2px solid var(--accent); }
 </style>

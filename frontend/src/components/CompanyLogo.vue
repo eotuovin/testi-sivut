@@ -13,7 +13,7 @@ const favicon = computed(() => {
 </script>
 
 <template>
-  <span class="logo" :style="{ background: `hsl(${hue} 22% 24%)` }">
+  <span class="logo" :style="{ background: `hsl(${hue} 35% 38%)` }">
     <img v-if="favicon" :src="favicon" alt="" loading="lazy" @error="($event.target as HTMLImageElement).style.display = 'none'" />
     <span v-else>{{ initials }}</span>
   </span>
