@@ -19,6 +19,9 @@ x-app-env: &app-env
   SESSION_SECRET: ${SESSION_SECRET}
   BOOTSTRAP_ADMIN_EMAIL: ${BOOTSTRAP_ADMIN_EMAIL:-}
   BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:-}
+  # Avora website's demo-request form → companies + contacts ("write" key).
+  INBOUND_API_KEY: ${INBOUND_API_KEY:-}
+  INBOUND_API_KEY_NAME: ${INBOUND_API_KEY_NAME:-avora-sivu}
   # AI. Preferred: the mirarun hub's agent sessions API (mirarun ADR-035).
   # MIRARUN_SESSION_TOKEN is Luuri's entry in mirarun's MIRARUN_SESSION_CLIENT_TOKENS.
   MIRARUN_URL: ${MIRARUN_URL:-}
