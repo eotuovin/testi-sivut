@@ -36,7 +36,7 @@ VAHVISTUS
 "Laitan kalenterikutsun. Ei tarvitse asentaa mitään. Jos tulee este, vastaa kutsuun niin siirretään."
 
 JOS "EI KIINNOSTA": "Selvä, kiitos että sanoit suoraan. Onko se niin että homma toimii jo, vai että ajankohta on huono?"
-HINTA JOS KYSYY: "149 €/kk ja käyttöönotto 990 € kerran – siihen kuuluu että me laitetaan se pystyyn."
+HINTA JOS KYSYY: "149 €/kk, ei aloitusmaksua – ja me laitetaan se pystyyn teidän puolesta."
 
 ÄLÄ: kysy "onko hetki", nosta ääntä, puhu päälle, väitä vastaan, sano "loistava".`
 
