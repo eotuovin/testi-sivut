@@ -331,7 +331,7 @@ async function verify(c: Contact) {
 <style scoped>
 .callgrid { display: grid; grid-template-columns: 1fr 1fr 1.1fr; gap: 1rem; align-items: start; }
 .person { display: flex; gap: 0.5rem; align-items: flex-start; padding: 0.5rem 0.6rem; border: 1px solid var(--line); border-radius: 7px; margin-top: 0.4rem; cursor: pointer; }
-.person.on { border-color: var(--accent); background: var(--accent-soft); }
+.person.on { border-color: rgba(142,162,255,0.6); background: var(--accent-soft); }
 .person.dnc { opacity: 0.55; cursor: not-allowed; }
 .dialcard { background: var(--surface-2); }
 @media (max-width: 1200px) { .callgrid { grid-template-columns: 1fr 1fr; } .callgrid > section:last-child { grid-column: 1 / -1; } }
