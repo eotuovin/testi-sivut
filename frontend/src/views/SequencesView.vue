@@ -230,7 +230,7 @@ const STATUS: Record<string, string> = { active: 'Käynnissä', finished: 'Valmi
 .step { border: 1px solid var(--line); border-radius: 8px; padding: 0.6rem 0.8rem; margin-bottom: 0.5rem; background: var(--surface-2); }
 .stephead { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
 .stepbody { margin-top: 0.5rem; display: flex; flex-direction: column; gap: 0.4rem; }
-.num { width: 24px; height: 24px; border-radius: 50%; background: var(--accent); color: var(--accent-ink); display: inline-grid; place-items: center; font-size: 0.75rem; font-weight: 700; flex: none; }
+.num { width: 24px; height: 24px; border-radius: 50%; background: var(--navy); color: #fff; display: inline-grid; place-items: center; font-size: 0.75rem; font-weight: 700; flex: none; }
 .flow { list-style: none; padding: 0; margin: 0; }
 .flow li { display: flex; gap: 0.75rem; padding: 0.6rem 0; border-left: 2px solid var(--line); margin-left: 11px; padding-left: 0.75rem; position: relative; }
 .flow li .num { position: absolute; left: -13px; top: 0.6rem; }
